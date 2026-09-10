@@ -88,6 +88,17 @@ const INPUT_HTML = `
   <input id="search" data-box="0,30,100,20">
   <a id="r1" href="/watch?v=1" data-box="0,120,100,100">one</a>`;
 
+const CARD_HTML = `
+  <a id="home" href="/" data-box="0,0,100,20">home</a>
+  <div class="h-box">
+    <div class="thumbnail"><a id="thumb" href="/watch?v=1" tabindex="-1" data-box="0,60,320,180"><img data-box="0,60,320,180"></a></div>
+    <a id="title" href="/watch?v=1" data-box="0,250,320,20">title</a>
+    <a id="channel" href="/channel/1" data-box="0,280,320,20">channel</a>
+    <a id="yt" href="https://www.youtube.com/watch?v=1" data-box="400,280,32,32">yt</a>
+    <a id="audio" href="/watch?v=1&amp;listen=1" data-box="440,280,32,32">audio</a>
+  </div>
+  <a id="next" href="/?page=2" data-box="0,600,100,20">next</a>`;
+
 const WATCH_HTML = `
   <div class="video-js" id="vjs" data-box="0,0,640,360" tabindex="0"></div>
   <video data-box="0,0,640,360"></video>`;
@@ -156,6 +167,29 @@ describe('D-pad navigation', () => {
     expect(activeId(win)).toBe('search');
     press(win, 53); // '5'
     expect(calls).toEqual([]);
+  });
+
+  it('focuses video thumbnails that Invidious marks tabindex="-1"', () => {
+    const win = setup(CARD_HTML);
+    press(win, 40); // body -> home link
+    expect(activeId(win)).toBe('home');
+    press(win, 40); // -> thumbnail (would be skipped by a blanket tabindex=-1 rule)
+    expect(activeId(win)).toBe('thumb');
+  });
+
+  it('collapses a tile to one stop: title, channel and icon links are skipped', () => {
+    const win = setup(CARD_HTML);
+    press(win, 40); // body -> home
+    press(win, 40); // -> thumbnail
+    expect(activeId(win)).toBe('thumb');
+    press(win, 40); // not title/channel/yt/audio -> next page link
+    expect(activeId(win)).toBe('next');
+  });
+
+  it('still ignores non-interactive tabindex="-1" nodes', () => {
+    const win = setup(`<div id="trap" tabindex="-1" data-box="0,0,100,100"></div>`);
+    expect(press(win, 40)).toBe(false);
+    expect(activeId(win)).toBe('BODY');
   });
 });
 

@@ -21,7 +21,7 @@
     39: "right",
     40: "down"
   };
-  var VERSION = "0.1.1";
+  var VERSION = "0.1.2";
   var PICKER_URL = "https://lennartschoch.github.io/invidious-tizen/dist/index.html";
 
   // src/userscript/hint.ts
@@ -143,6 +143,14 @@
 
   // src/userscript/navigation.ts
   var FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex],[role="button"]';
+  var INTERACTIVE = 'a[href],button,input,select,textarea,[role="button"]';
+  var isSecondaryLink = (el) => {
+    if (el.tagName !== "A") return false;
+    const tile = el.closest(".h-box");
+    if (!tile) return false;
+    const thumb = tile.querySelector(".thumbnail a[href]");
+    return !!thumb && el !== thumb;
+  };
   var isVisible = (el) => {
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return false;
@@ -155,7 +163,8 @@
     for (let i = 0; i < found.length; i++) {
       const el = found[i];
       if (el.disabled) continue;
-      if (el.getAttribute("tabindex") === "-1") continue;
+      if (el.getAttribute("tabindex") === "-1" && !el.matches(INTERACTIVE)) continue;
+      if (isSecondaryLink(el)) continue;
       if (isVisible(el)) out.push(el);
     }
     return out;

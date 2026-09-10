@@ -138,6 +138,7 @@
   // src/userscript/navigation.ts; the injected userscript leaves the picker's
   // keys to us (window.__invidiousPicker), so the picker must stay standalone.
   var FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex],[role="button"]';
+  var INTERACTIVE = 'a[href],button,input,select,textarea,[role="button"]';
   var ARROWS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
 
   function isVisible(el) {
@@ -170,7 +171,8 @@
     var els = [];
     for (var i = 0; i < found.length; i++) {
       var el = found[i];
-      if (el.disabled || el.getAttribute('tabindex') === '-1') continue;
+      if (el.disabled) continue;
+      if (el.getAttribute('tabindex') === '-1' && !el.matches(INTERACTIVE)) continue;
       if (isVisible(el)) els.push(el);
     }
     if (!els.length) return false;

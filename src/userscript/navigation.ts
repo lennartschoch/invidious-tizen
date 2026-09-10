@@ -1,6 +1,22 @@
 import type { Direction } from './constants';
 
 const FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex],[role="button"]';
+// Invidious marks video thumbnails (and some channel links) tabindex="-1" to
+// keep them out of the browser's tab order, but on a TV they are exactly what
+// we want to focus. Only skip tabindex="-1" on otherwise non-interactive nodes.
+const INTERACTIVE = 'a[href],button,input,select,textarea,[role="button"]';
+
+/** On a listing a video is a tile made of several links to the same content:
+ *  the thumbnail, the title, the channel and the little icon actions. The D-pad
+ *  wants one stop per tile — the thumbnail — so drop the tile's other links.
+ *  Coupled to Invidious markup: a tile is a `.h-box` holding a `.thumbnail a`. */
+const isSecondaryLink = (el: Element): boolean => {
+  if (el.tagName !== 'A') return false;
+  const tile = el.closest('.h-box');
+  if (!tile) return false;
+  const thumb = tile.querySelector('.thumbnail a[href]');
+  return !!thumb && el !== thumb;
+};
 
 const isVisible = (el: Element): boolean => {
   const rect = el.getBoundingClientRect();
@@ -17,7 +33,8 @@ const focusables = (): HTMLElement[] => {
   for (let i = 0; i < found.length; i++) {
     const el = found[i] as HTMLElement;
     if ((el as HTMLButtonElement).disabled) continue;
-    if (el.getAttribute('tabindex') === '-1') continue;
+    if (el.getAttribute('tabindex') === '-1' && !el.matches(INTERACTIVE)) continue;
+    if (isSecondaryLink(el)) continue;
     if (isVisible(el)) out.push(el);
   }
   return out;

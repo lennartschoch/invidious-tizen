@@ -71,6 +71,44 @@ await sleep(500);
 const after = await ev('document.activeElement ? (document.activeElement.tagName + "|" + (document.activeElement.getAttribute("href") || "")) : null');
 check('ArrowDown moves focus off body', before === 'BODY' && !!after && after !== 'BODY', `${before} -> ${after}`);
 
+// Video thumbnails are <a href="/watch…" tabindex="-1"> wrapping an <img>.
+// A blanket tabindex="-1" filter used to make them unreachable, so assert a
+// thumbnail can actually receive focus via the D-pad, not just that *some*
+// element can.
+const hasThumb = await ev(`(function(){
+  var links = document.querySelectorAll('a[href*="/watch"][tabindex="-1"]');
+  for (var i = 0; i < links.length; i++) {
+    if (links[i].querySelector('img')) { window.__itvThumb = links[i]; return true; }
+  }
+  return false;
+})()`);
+check('search page has tabindex="-1" thumbnail links', hasThumb);
+await ev('document.activeElement && document.activeElement.blur && document.activeElement.blur()');
+let thumbFocused = false;
+for (let i = 0; i < 30 && hasThumb; i++) {
+  await press(40, 'ArrowDown');
+  await sleep(150);
+  if (await ev('document.activeElement === window.__itvThumb')) { thumbFocused = true; break; }
+}
+check('a video thumbnail link can receive focus', thumbFocused);
+
+// A tile should be one stop: Down from its thumbnail must not land on the
+// title, channel or icon links that target the same video.
+const secondary = await ev(`(function(){
+  var thumb = window.__itvThumb;
+  var tile = thumb && thumb.closest('.h-box');
+  if (!tile) return -1;
+  window.__itvTileOthers = Array.prototype.filter.call(tile.querySelectorAll('a'), function(a){ return a !== thumb; });
+  return window.__itvTileOthers.length;
+})()`);
+check('tile exposes secondary links to skip', secondary > 0, `secondary=${secondary}`);
+await press(40, 'ArrowDown');
+await sleep(250);
+check(
+  'Down leaves the tile instead of its title/channel/icons',
+  await ev('window.__itvTileOthers.indexOf(document.activeElement) === -1'),
+);
+
 // ---- watch page / player ----
 await send('Page.navigate', { url: `${INVIDIOUS}/watch?v=${VIDEO}` });
 for (let i = 0; i < 20; i++) {
