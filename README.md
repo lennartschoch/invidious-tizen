@@ -11,7 +11,7 @@ A [TizenBrew](https://github.com/reisxd/TizenBrew) module for **Tizen 5.5+** (20
 ![TizenBrew](https://img.shields.io/badge/TizenBrew-module-8A2BE2)
 ![Tizen](https://img.shields.io/badge/Tizen-5.5%2B-1428A0)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
-![tests](https://img.shields.io/badge/tests-25%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-28%20passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 <br>
@@ -32,8 +32,8 @@ Tizen's browser only hands a web page six keys — D-pad, Enter and Back. Media 
 - **▶️ YouTube-TV player controls** — play/pause, `±10s` seek, and `0–9` to jump to a percentage, exactly like the TV app.
 - **🎛 Media keys** — Play/Pause/Stop/Rewind/Fast-forward are registered via `tizen.tvinputdevice` and drive the video.js player.
 - **🔀 Instance picker** — first launch asks where to connect; later launches probe the instance and redirect as soon as it answers.
-- **🛟 Never stuck** — a dead instance leaves you on the picker instead of an error page, and Back returns to the picker.
-- **↩️ Back done right** — leave fullscreen → history back → exit.
+- **🛟 Never stuck** — a dead instance leaves you on the picker instead of an error page, and Back steps back through history toward TizenBrew.
+- **↩️ Back done right** — leave fullscreen → step back toward TizenBrew's module list → exit only at the very start.
 
 ## 🚀 Install
 
@@ -51,7 +51,7 @@ Mirrors YouTube TV wherever the buttons exist there.
 |---|---|
 | **D-pad** | Move focus between links/buttons/inputs |
 | **OK** | Activate the focused item; in the player, reveal the controls |
-| **Back** | Leave fullscreen → previous page → exit the app |
+| **Back** | Leave fullscreen → step back toward TizenBrew → exit at the start |
 | **Play/Pause**, Play, Pause | Play or pause |
 | **Stop** | Pause |
 | **Rewind / Fast-forward** | Seek −10s / +10s |
@@ -79,7 +79,7 @@ than at one hardcoded instance.
 - **If it doesn't answer**, the picker stays put ("Couldn't reach …") — you're
   never dumped onto an error page.
 - **Change it any time** from Invidious → **Preferences → Invidious Tizen → Open instance picker**.
-- It uses `location.href` (assign), so **Back** returns to the picker.
+- It uses `location.href` (assign), so it stays in history and **Back** steps through the picker on the way to TizenBrew.
 
 ## 🛠 How it works
 

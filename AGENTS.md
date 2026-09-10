@@ -60,7 +60,7 @@ oxlint is the linter; adding ESLint back means dropping TS 7.
 | Player context is narrow | Arrows steer the player only when fullscreen or focus is inside `.video-js`. On a watch page with nothing focused they navigate, so the sidebar/comments stay reachable. Widening this traps the user in the player. |
 | Text-input guard | While focus is in an input/textarea/`contenteditable`, only Back is handled, so the TV keyboard works. Intercepting arrows there breaks typing. |
 | Number keys → percentage | YouTube TV parity: `0–9` jump to 0–90%. Up/Down/OK reveal the player controls; volume stays on the TV's own keys. |
-| Back precedence | fullscreen → `history.back()` (only when `pathname !== '/'`) → Tizen exit. Keep the order. |
+| Back precedence | fullscreen → `history.back()` whenever there is history (including at `/`) → Tizen exit only with no history. The old `pathname !== '/'` guard exited the app on Invidious' root; do not reintroduce it. |
 | `PICKER_URL` hardcoded in `src/userscript/constants.ts` | The userscript has no way to discover its own origin; a fork/rename must update it. |
 | `esbuild` target `chrome69` | Tizen 5.5 is Chromium 69. Raise the target only after verifying on the TV. |
 

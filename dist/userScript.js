@@ -237,7 +237,7 @@
       void document.exitFullscreen();
       return true;
     }
-    if (window.history && window.history.length > 1 && location.pathname !== "/") {
+    if (window.history && window.history.length > 1) {
       window.history.back();
       return true;
     }

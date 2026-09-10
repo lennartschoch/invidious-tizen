@@ -192,9 +192,26 @@
     return true;
   }
 
-  // Any key during the check cancels it; otherwise the D-pad moves focus.
-  // Arrows stay with the URL input so the TV keyboard and caret work.
+  // Back leaves for the TizenBrew module list, D-pad moves focus. Arrows stay
+  // with the URL input so the TV keyboard and caret work.
+  function exitToTizenBrew() {
+    try {
+      if (typeof tizen !== 'undefined' && tizen && tizen.application) {
+        tizen.application.getCurrentApplication().exit();
+        return true;
+      }
+    } catch (e) { /* not on Tizen */ }
+    return false;
+  }
+
   window.addEventListener('keydown', function (e) {
+    if (e.keyCode === 10009 || e.keyCode === 27) {
+      if (window.history && window.history.length > 1) window.history.back();
+      else exitToTizenBrew();
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (pending) { showPicker(); return; }
     var tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea') return;

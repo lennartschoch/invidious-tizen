@@ -233,7 +233,7 @@ describe('Back precedence', () => {
     expect(exit).toHaveBeenCalledTimes(1);
   });
 
-  it('goes back through history when not fullscreen', () => {
+  it('goes back through history toward TizenBrew', () => {
     const win = setup(WATCH_HTML, 'https://invidious.test/watch?v=1');
     win.history.pushState({}, '', '/watch?v=2'); // history.length now > 1
     const back = vi.fn();
@@ -242,7 +242,16 @@ describe('Back precedence', () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 
-  it('exits the Tizen app at the root', () => {
+  it('goes back from the root too, instead of exiting the app', () => {
+    const win = setup(WATCH_HTML, 'https://invidious.test/');
+    win.history.pushState({}, '', '/'); // history.length now > 1
+    const back = vi.fn();
+    win.history.back = back;
+    press(win, 10009);
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it('exits the Tizen app only when there is no history', () => {
     const win = setup(WATCH_HTML, 'https://invidious.test/');
     const exit = vi.fn();
     win.tizen = { application: { getCurrentApplication: () => ({ exit }) } };

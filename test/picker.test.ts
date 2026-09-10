@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 
@@ -58,6 +58,34 @@ describe('instance picker', () => {
     win.document.dispatchEvent(e);
     expect(e.defaultPrevented).toBe(false);
     expect(win.document.activeElement).toBe(input);
+  });
+
+  it('goes back toward TizenBrew when there is history', () => {
+    const win = load();
+    win.history.pushState({}, '', '/?hop=1');
+    const back = vi.fn();
+    win.history.back = back;
+    const exit = vi.fn();
+    win.tizen = { application: { getCurrentApplication: () => ({ exit }) } };
+    const e = new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
+    Object.defineProperty(e, 'keyCode', { get: () => 10009 });
+    win.document.dispatchEvent(e);
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(exit).not.toHaveBeenCalled();
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('exits the Tizen app on Back when there is no history', () => {
+    const win = load();
+    const exit = () => {
+      win.__exited = true;
+    };
+    win.tizen = { application: { getCurrentApplication: () => ({ exit }) } };
+    const e = new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
+    Object.defineProperty(e, 'keyCode', { get: () => 10009 });
+    win.document.dispatchEvent(e);
+    expect(win.__exited).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
   });
 
   it('saves a preset when chosen', () => {

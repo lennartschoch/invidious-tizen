@@ -42,13 +42,14 @@ const onEnter = (): boolean => {
   return false;
 };
 
-/** Back: leave fullscreen, else go back through history, else exit the app. */
+/** Back: leave fullscreen, else walk history back toward TizenBrew's module
+ *  list, else exit the app once there is nowhere left to go. */
 const handleBack = (): boolean => {
   if (document.fullscreenElement && document.exitFullscreen) {
     void document.exitFullscreen();
     return true;
   }
-  if (window.history && window.history.length > 1 && location.pathname !== '/') {
+  if (window.history && window.history.length > 1) {
     window.history.back();
     return true;
   }
