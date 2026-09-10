@@ -61,6 +61,24 @@ const score = (
   return dy <= EPS ? null : to.y - from.y + Math.abs(dx) * 2;
 };
 
+/** Nearest element in `dir` from `origin`, or null. */
+const nearest = (
+  origin: { x: number; y: number },
+  els: HTMLElement[],
+  dir: Direction,
+): HTMLElement | null => {
+  let best: HTMLElement | null = null;
+  let bestScore = Infinity;
+  for (const el of els) {
+    const s = score(origin, centerOf(el), dir);
+    if (s !== null && s < bestScore) {
+      bestScore = s;
+      best = el;
+    }
+  }
+  return best;
+};
+
 /** Move focus to the nearest focusable element in `dir`. Returns whether focus moved. */
 export const moveFocus = (dir: Direction): boolean => {
   const els = focusables();
@@ -76,18 +94,21 @@ export const moveFocus = (dir: Direction): boolean => {
     return true;
   }
 
-  const origin = centerOf(current);
-  let best: HTMLElement | null = null;
-  let bestScore = Infinity;
-  for (const el of els) {
-    if (el === current) continue;
-    const s = score(origin, centerOf(el), dir);
-    if (s !== null && s < bestScore) {
-      bestScore = s;
-      best = el;
-    }
-  }
+  const best = nearest(
+    centerOf(current),
+    els.filter((el) => el !== current),
+    dir,
+  );
+  if (!best) return false;
+  best.focus();
+  return true;
+};
 
+/** Move focus out of `container` to the nearest focusable in `dir`. Lets the
+ *  D-pad leave the video player for the page content below it. */
+export const moveFocusOutside = (container: Element, dir: Direction): boolean => {
+  const els = focusables().filter((el) => !container.contains(el));
+  const best = nearest(centerOf(container), els, dir);
   if (!best) return false;
   best.focus();
   return true;
@@ -108,4 +129,19 @@ export const installFocusScrolling = (): void => {
     },
     true,
   );
+};
+
+/** After leaving fullscreen, move focus out of the player so the D-pad browses
+ *  the page again instead of steering the video. */
+export const installFullscreenExitFocus = (): void => {
+  const onExit = (): void => {
+    if (document.fullscreenElement) return;
+    const player = document.querySelector('.video-js');
+    const active = document.activeElement;
+    if (player && active && player.contains(active)) {
+      moveFocusOutside(player, 'down');
+    }
+  };
+  document.addEventListener('fullscreenchange', onExit, false);
+  document.addEventListener('webkitfullscreenchange', onExit, false);
 };

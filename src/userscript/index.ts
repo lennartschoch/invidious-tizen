@@ -13,7 +13,7 @@ import { VERSION } from './constants';
 import { installKeyHandler } from './keys';
 import { log } from './log';
 import { ensurePlayerFocusable } from './media';
-import { installFocusScrolling } from './navigation';
+import { installFocusScrolling, installFullscreenExitFocus } from './navigation';
 import { schedulePreferencesSection } from './preferences';
 import { injectStyles } from './styles';
 
@@ -22,6 +22,7 @@ const init = (): void => {
   injectStyles();
   installKeyHandler();
   installFocusScrolling();
+  installFullscreenExitFocus();
   ensurePlayerFocusable();
   document.addEventListener('DOMContentLoaded', ensurePlayerFocusable, false);
   schedulePreferencesSection();

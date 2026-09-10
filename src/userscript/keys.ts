@@ -1,15 +1,19 @@
 import { ARROW, KEYS } from './constants';
 import {
+  enterFullscreen,
+  exitFullscreen,
   focusPlayer,
   hasMedia,
   inPlayerContext,
+  isFullscreen,
   pausePlayback,
+  play,
   revealControls,
   seekBy,
   seekPercent,
   togglePlay,
 } from './media';
-import { moveFocus } from './navigation';
+import { moveFocus, moveFocusOutside } from './navigation';
 
 const isTextInput = (el: Element | null): boolean => {
   if (!el) return false;
@@ -30,25 +34,23 @@ const isActivatable = (el: Element | null): boolean => {
   );
 };
 
-/** YouTube TV: OK activates the focused item; on a watch page with nothing
- *  focused it hands control to the player and reveals its controls. */
+/** YouTube TV-style: OK selects a video, so on a watch page it focuses the
+ *  player and enters fullscreen playback; in fullscreen it toggles play/pause.
+ *  A real player control (big play button, control bar) is left to the browser. */
 const onEnter = (): boolean => {
-  if (inPlayerContext()) return revealControls();
   if (isActivatable(document.activeElement)) return false; // let the browser activate it
-  if (hasMedia()) {
-    focusPlayer();
-    return revealControls();
-  }
-  return false;
+  if (document.fullscreenElement || isFullscreen()) return togglePlay();
+  if (!hasMedia()) return false;
+  focusPlayer();
+  enterFullscreen();
+  play();
+  return true;
 };
 
 /** Back: leave fullscreen, else walk history back toward TizenBrew's module
  *  list, else exit the app once there is nowhere left to go. */
 const handleBack = (): boolean => {
-  if (document.fullscreenElement && document.exitFullscreen) {
-    void document.exitFullscreen();
-    return true;
-  }
+  if (exitFullscreen()) return true;
   if (window.history && window.history.length > 1) {
     window.history.back();
     return true;
@@ -76,7 +78,13 @@ const onKeyDown = (e: KeyboardEvent): void => {
   const dir = ARROW[code];
   if (dir) {
     if (inPlayerContext()) {
-      handled = dir === 'left' ? seekBy(-10) : dir === 'right' ? seekBy(10) : revealControls();
+      const player = document.querySelector('.video-js');
+      const leaveDown =
+        dir === 'down' && !document.fullscreenElement && player
+          ? moveFocusOutside(player, 'down')
+          : false;
+      handled =
+        dir === 'left' ? seekBy(-10) : dir === 'right' ? seekBy(10) : leaveDown || revealControls();
     } else {
       handled = moveFocus(dir);
     }

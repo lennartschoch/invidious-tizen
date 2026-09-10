@@ -21,7 +21,7 @@
     39: "right",
     40: "down"
   };
-  var VERSION = "0.1.2";
+  var VERSION = "0.1.3";
   var PICKER_URL = "https://lennartschoch.github.io/invidious-tizen/dist/index.html";
 
   // src/userscript/hint.ts
@@ -89,6 +89,12 @@
     };
   };
   var hasMedia = () => media() !== null;
+  var play = () => {
+    const m = media();
+    if (!m) return false;
+    m.play();
+    return true;
+  };
   var togglePlay = () => {
     const m = media();
     if (!m) return false;
@@ -129,14 +135,55 @@
     const el = document.activeElement;
     return !!(el && el.closest && el.closest(".video-js"));
   };
+  var isFullscreen = () => {
+    const p = player();
+    if (p && typeof p.isFullscreen === "function") return !!p.isFullscreen();
+    return !!document.fullscreenElement;
+  };
+  var requestFs = (el) => {
+    const request = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (typeof request !== "function") return false;
+    try {
+      const result = request.call(el);
+      if (result && typeof result.catch === "function") result.catch(() => {
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  var enterFullscreen = () => {
+    const p = player();
+    if (p && typeof p.requestFullscreen === "function") {
+      try {
+        p.requestFullscreen();
+        return true;
+      } catch {
+      }
+    }
+    const el = document.querySelector(".video-js") || video();
+    return el ? requestFs(el) : false;
+  };
+  var exitFullscreen = () => {
+    const p = player();
+    if (p && typeof p.isFullscreen === "function" && p.isFullscreen() && typeof p.exitFullscreen === "function") {
+      p.exitFullscreen();
+      return true;
+    }
+    if (document.fullscreenElement && document.exitFullscreen) {
+      void document.exitFullscreen();
+      return true;
+    }
+    return false;
+  };
   var ensurePlayerFocusable = () => {
     const el = document.querySelector(".video-js");
-    if (el && !el.getAttribute("tabindex")) el.setAttribute("tabindex", "0");
+    if (el && el.getAttribute("tabindex") !== "0") el.setAttribute("tabindex", "0");
   };
   var focusPlayer = () => {
     const el = document.querySelector(".video-js") || video();
     if (!el) return false;
-    if (!el.getAttribute("tabindex")) el.setAttribute("tabindex", "0");
+    if (el.getAttribute("tabindex") !== "0") el.setAttribute("tabindex", "0");
     el.focus();
     return true;
   };
@@ -182,6 +229,18 @@
     if (dir === "up") return dy >= -EPS ? null : from.y - to.y + Math.abs(dx) * 2;
     return dy <= EPS ? null : to.y - from.y + Math.abs(dx) * 2;
   };
+  var nearest = (origin, els, dir) => {
+    let best = null;
+    let bestScore = Infinity;
+    for (const el of els) {
+      const s = score(origin, centerOf(el), dir);
+      if (s !== null && s < bestScore) {
+        bestScore = s;
+        best = el;
+      }
+    }
+    return best;
+  };
   var moveFocus = (dir) => {
     const els = focusables();
     if (!els.length) return false;
@@ -191,17 +250,18 @@
       els[0].focus();
       return true;
     }
-    const origin = centerOf(current);
-    let best = null;
-    let bestScore = Infinity;
-    for (const el of els) {
-      if (el === current) continue;
-      const s = score(origin, centerOf(el), dir);
-      if (s !== null && s < bestScore) {
-        bestScore = s;
-        best = el;
-      }
-    }
+    const best = nearest(
+      centerOf(current),
+      els.filter((el) => el !== current),
+      dir
+    );
+    if (!best) return false;
+    best.focus();
+    return true;
+  };
+  var moveFocusOutside = (container, dir) => {
+    const els = focusables().filter((el) => !container.contains(el));
+    const best = nearest(centerOf(container), els, dir);
     if (!best) return false;
     best.focus();
     return true;
@@ -220,6 +280,18 @@
       true
     );
   };
+  var installFullscreenExitFocus = () => {
+    const onExit = () => {
+      if (document.fullscreenElement) return;
+      const player2 = document.querySelector(".video-js");
+      const active = document.activeElement;
+      if (player2 && active && player2.contains(active)) {
+        moveFocusOutside(player2, "down");
+      }
+    };
+    document.addEventListener("fullscreenchange", onExit, false);
+    document.addEventListener("webkitfullscreenchange", onExit, false);
+  };
 
   // src/userscript/keys.ts
   var isTextInput = (el) => {
@@ -233,19 +305,16 @@
     return tag === "a" || tag === "button" || tag === "input" || tag === "select" || tag === "textarea" || el.getAttribute("role") === "button";
   };
   var onEnter = () => {
-    if (inPlayerContext()) return revealControls();
     if (isActivatable(document.activeElement)) return false;
-    if (hasMedia()) {
-      focusPlayer();
-      return revealControls();
-    }
-    return false;
+    if (document.fullscreenElement || isFullscreen()) return togglePlay();
+    if (!hasMedia()) return false;
+    focusPlayer();
+    enterFullscreen();
+    play();
+    return true;
   };
   var handleBack = () => {
-    if (document.fullscreenElement && document.exitFullscreen) {
-      void document.exitFullscreen();
-      return true;
-    }
+    if (exitFullscreen()) return true;
     if (window.history && window.history.length > 1) {
       window.history.back();
       return true;
@@ -267,7 +336,9 @@
     const dir = ARROW[code];
     if (dir) {
       if (inPlayerContext()) {
-        handled = dir === "left" ? seekBy(-10) : dir === "right" ? seekBy(10) : revealControls();
+        const player2 = document.querySelector(".video-js");
+        const leaveDown = dir === "down" && !document.fullscreenElement && player2 ? moveFocusOutside(player2, "down") : false;
+        handled = dir === "left" ? seekBy(-10) : dir === "right" ? seekBy(10) : leaveDown || revealControls();
       } else {
         handled = moveFocus(dir);
       }
@@ -343,8 +414,16 @@
 
   // src/userscript/styles.ts
   var STYLES = [
-    ":focus{outline:3px solid #ff3b30 !important;outline-offset:2px;}",
-    ".video-js:focus{outline:3px solid #ff3b30 !important;outline-offset:0;}",
+    ":focus{outline:3px solid #fff !important;outline-offset:2px;}",
+    // Invidious puts the theme class on <body>; ring white on dark, near-black on
+    // light so it stays visible either way. The picker is dark and unclassed.
+    ".light-theme :focus{outline-color:#111 !important;}",
+    // Invidious video thumbnails are inline links whose only content is a block
+    // <img>. An inline box with no line box paints no outline, so the ring above
+    // silently disappears; make the link a block while focused.
+    ".thumbnail a:focus{display:block;}",
+    ".video-js:focus{outline:3px solid #fff !important;outline-offset:0;}",
+    ".light-theme .video-js:focus{outline-color:#111 !important;}",
     ".itv-hint{position:fixed;left:0;right:0;bottom:0;z-index:2147483647;",
     "background:rgba(0,0,0,.82);color:#fff;font:600 18px/1.4 sans-serif;",
     "padding:10px 16px;text-align:center;pointer-events:none;opacity:0;",
@@ -364,6 +443,7 @@
     injectStyles();
     installKeyHandler();
     installFocusScrolling();
+    installFullscreenExitFocus();
     ensurePlayerFocusable();
     document.addEventListener("DOMContentLoaded", ensurePlayerFocusable, false);
     schedulePreferencesSection();

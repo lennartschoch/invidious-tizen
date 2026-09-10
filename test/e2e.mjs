@@ -85,10 +85,12 @@ const hasThumb = await ev(`(function(){
 check('search page has tabindex="-1" thumbnail links', hasThumb);
 await ev('document.activeElement && document.activeElement.blur && document.activeElement.blur()');
 let thumbFocused = false;
-for (let i = 0; i < 30 && hasThumb; i++) {
-  await press(40, 'ArrowDown');
-  await sleep(150);
-  if (await ev('document.activeElement === window.__itvThumb')) { thumbFocused = true; break; }
+if (hasThumb) {
+  for (let i = 0; i < 30; i++) {
+    await press(40, 'ArrowDown');
+    await sleep(150);
+    if (await ev('document.activeElement === window.__itvThumb')) { thumbFocused = true; break; }
+  }
 }
 check('a video thumbnail link can receive focus', thumbFocused);
 
@@ -122,20 +124,35 @@ for (let i = 0; i < 25; i++) {
   await sleep(1000);
 }
 check('watch page has a player with duration', dur > 0, `duration=${dur}s`);
+check(
+  'video.js player is promoted to tabindex=0 (D-pad reachable)',
+  await ev('(function(){var e=document.querySelector(".video-js");return !!e && e.getAttribute("tabindex") === "0";})()'),
+);
 
-await press(13, 'Enter'); // OK on body -> hand control to the player
-await sleep(500);
+await press(13, 'Enter'); // OK on body -> focus the player and start playback
+await sleep(600);
 const focused = await ev('document.activeElement ? document.activeElement.className : null');
-check('OK hands control to the player', typeof focused === 'string' && focused.indexOf('video-js') !== -1, `active="${focused}"`);
+const okPlaying = await ev('document.querySelector("video").paused === false');
+check(
+  'OK focuses the player and starts playback',
+  typeof focused === 'string' && focused.indexOf('video-js') !== -1 && okPlaying,
+  `active="${focused}" paused=${!okPlaying}`,
+);
 
 await press(53, '5'); // number 5 -> 50%
 await sleep(900);
 const t50 = await ev('Math.round(document.querySelector("video").currentTime)');
 check('number key seeks to ~50%', Math.abs(t50 - dur / 2) <= 6, `t=${t50}s target=${Math.round(dur / 2)}s`);
 
-await press(10252, 'MediaPlayPause');
-const paused = await ev('document.querySelector("video").paused');
-check('MediaPlayPause starts playback', paused === false, `paused=${paused}`);
+await press(10252, 'MediaPlayPause'); // pause
+await sleep(300);
+const pausedNow = await ev('document.querySelector("video").paused');
+check('MediaPlayPause pauses', pausedNow === true, `paused=${pausedNow}`);
+
+await press(10252, 'MediaPlayPause'); // resume
+await sleep(300);
+const resumed = await ev('document.querySelector("video").paused');
+check('MediaPlayPause starts playback', resumed === false, `paused=${resumed}`);
 // software decode under Rosetta is slow to fill the buffer, so poll.
 let tPlay = t50, advanced = false;
 for (let i = 0; i < 20; i++) {
@@ -149,6 +166,20 @@ await press(39, 'ArrowRight'); // seek +10s while the player has focus
 await sleep(1500);
 const tSeek = await ev('Math.round(document.querySelector("video").currentTime)');
 check('ArrowRight seeks forward', tSeek >= tPlay + 5, `${tPlay}s -> ${tSeek}s`);
+
+// OK entered fullscreen (when the environment allows it). Leaving fullscreen
+// should hand focus back to the page, and Down should then stay off the player.
+await ev('(document.fullscreenElement && document.exitFullscreen) ? document.exitFullscreen() : 0');
+await sleep(600);
+await ev('(function(){var p=document.querySelector(".video-js"); if(p){p.focus();return true;} return false;})()');
+await sleep(100);
+await press(40, 'ArrowDown');
+await sleep(400);
+check(
+  'Down leaves the player for the content below',
+  await ev('(function(){var a=document.activeElement;return !a || !a.closest || !a.closest(".video-js");})()'),
+  await ev('document.activeElement ? document.activeElement.tagName : null'),
+);
 
 // ---- preferences: injected "Invidious Tizen" section ----
 await send('Page.navigate', { url: `${INVIDIOUS}/preferences` });

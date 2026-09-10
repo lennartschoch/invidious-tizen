@@ -103,6 +103,11 @@ const WATCH_HTML = `
   <div class="video-js" id="vjs" data-box="0,0,640,360" tabindex="0"></div>
   <video data-box="0,0,640,360"></video>`;
 
+const WATCH_CONTENT_HTML = `
+  <div class="video-js" id="vjs" data-box="0,0,640,360" tabindex="0"></div>
+  <a id="info" href="/channel/1" data-box="0,380,640,40">channel</a>
+  <a id="comments" href="/comments" data-box="0,440,640,40">comments</a>`;
+
 const PREFS_HTML = `
   <div class="h-box">
     <form class="pure-form pure-form-aligned" action="/preferences?referer=%2F">
@@ -116,6 +121,13 @@ describe('injection', () => {
     expect(win.document.querySelectorAll('#itv-style').length).toBe(1);
     win.eval(SRC); // second injection
     expect(win.document.querySelectorAll('#itv-style').length).toBe(1);
+  });
+
+  it('forces focused thumbnail links to block so the ring paints', () => {
+    const win = setup(NAV_HTML);
+    const css = win.document.getElementById('itv-style').textContent;
+    expect(css).toContain('.thumbnail a:focus{display:block;}');
+    expect(css).toContain('.light-theme :focus{outline-color:#111 !important;}');
   });
 
   it('adds the Invidious Tizen section on /preferences', () => {
@@ -234,13 +246,65 @@ describe('player: YouTube TV parity', () => {
     expect(calls).toEqual(['userActive:true', 'controls:true', 'userActive:true', 'controls:true']);
   });
 
-  it('OK on a watch page with nothing focused hands control to the player', () => {
-    const win = setup(WATCH_HTML);
+  it('Down leaves the player for the content below', () => {
+    const win = setup(WATCH_CONTENT_HTML);
+    playerStub(win);
+    win.document.getElementById('vjs').focus();
+    press(win, 40);
+    expect(activeId(win)).toBe('info');
+  });
+
+  it('Down in fullscreen reveals controls instead of leaving', () => {
+    const win = setup(WATCH_CONTENT_HTML);
     const { calls } = playerStub(win);
+    Object.defineProperty(win.document, 'fullscreenElement', {
+      get: () => win.document.getElementById('vjs'),
+      configurable: true,
+    });
+    win.document.getElementById('vjs').focus();
+    press(win, 40);
+    expect(activeId(win)).toBe('vjs');
+    expect(calls).toContain('controls:true');
+  });
+
+  it('OK on a watch page focuses the player, enters fullscreen and plays', () => {
+    const win = setup(WATCH_HTML);
+    const { calls, state } = playerStub(win);
+    const fs = vi.fn(() => Promise.resolve());
+    win.document.getElementById('vjs').requestFullscreen = fs;
     expect(activeId(win)).toBe('BODY');
     press(win, 13);
     expect(activeId(win)).toBe('vjs');
-    expect(calls).toContain('userActive:true');
+    expect(fs).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['play']);
+    expect(state.paused).toBe(false);
+  });
+
+  it('OK in fullscreen toggles playback', () => {
+    const win = setup(WATCH_HTML);
+    const { state } = playerStub(win);
+    Object.defineProperty(win.document, 'fullscreenElement', {
+      get: () => win.document.getElementById('vjs'),
+      configurable: true,
+    });
+    win.document.getElementById('vjs').focus();
+    press(win, 13);
+    expect(state.paused).toBe(false);
+    press(win, 13);
+    expect(state.paused).toBe(true);
+  });
+
+  it('moves focus out of the player after leaving fullscreen', () => {
+    const win = setup(WATCH_CONTENT_HTML);
+    playerStub(win);
+    win.document.getElementById('vjs').focus();
+    win.document.dispatchEvent(new win.Event('fullscreenchange'));
+    expect(activeId(win)).toBe('info');
+  });
+
+  it('promotes the video.js player from tabindex="-1" to 0', () => {
+    const win = setup(`<div class="video-js" id="vjs" data-box="0,0,640,360" tabindex="-1"></div>`);
+    expect(win.document.getElementById('vjs').getAttribute('tabindex')).toBe('0');
   });
 
   it('ignores colour keys (no YouTube TV equivalent, not registered)', () => {
