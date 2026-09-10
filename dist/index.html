@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invidious</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #0f0f0f; color: #f1f1f1;
+    font: 24px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 4vh 5vw;
+  }
+  main { width: min(1100px, 100%); }
+  h1 { font-size: 2.2em; margin: 0 0 .2em; }
+  p { margin: .2em 0 1em; color: #aaa; }
+  [hidden] { display: none !important; }
+  .presets { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); margin-bottom: 32px; }
+  button, input {
+    font: inherit; color: inherit; background: #1c1c1c; border: 2px solid #333;
+    border-radius: 12px; padding: 18px 22px; width: 100%; text-align: left;
+  }
+  button { cursor: pointer; }
+  button:hover, input:focus, button:focus { border-color: #f1f1f1; outline: none; }
+  input:focus, button:focus { box-shadow: 0 0 0 4px rgba(255,255,255,.35); }
+  form { display: flex; gap: 16px; }
+  form input { flex: 1; }
+  form button { width: auto; white-space: nowrap; text-align: center; }
+  .hint { margin-top: 28px; font-size: .8em; color: #777; }
+  #loading { text-align: center; }
+  .spinner {
+    width: 56px; height: 56px; margin: 0 auto 20px;
+    border: 6px solid #333; border-top-color: #f1f1f1; border-radius: 50%;
+    animation: itv-spin 1s linear infinite;
+  }
+  @keyframes itv-spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<!-- Marks this page so the injected userscript leaves key handling to us. -->
+<script>window.__invidiousPicker = true;</script>
+
+<main>
+  <h1>Invidious</h1>
+  <p id="status">Choose an instance</p>
+
+  <section id="picker">
+    <div class="presets" id="presets"></div>
+    <form id="custom">
+      <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+             placeholder="https://invidious.example.com" aria-label="Instance URL">
+      <button type="submit">Connect</button>
+    </form>
+    <p class="hint">Your choice is saved on this TV. To change it later, use
+      “Open instance picker” in Invidious preferences.</p>
+  </section>
+
+  <div id="loading" hidden>
+    <div class="spinner"></div>
+    <p id="loading-text">Checking instance…</p>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var STORE_KEY = 'invidious-tizen.instance';
+  // Taken from https://docs.invidious.io/instances/
+  var PRESETS = [
+    { url: 'https://inv.nadeko.net/', flag: '🇨🇱' },
+    { url: 'https://invidious.nerdvpn.de/', flag: '🇺🇦' },
+    { url: 'https://yt.chocolatemoo53.com/', flag: '🇺🇸' },
+    { url: 'https://invidious.tiekoetter.com/', flag: '🇩🇪' },
+    { url: 'https://invidious.f5.si/', flag: '🇯🇵' }
+  ];
+  var statusEl = document.getElementById('status');
+  var pickerEl = document.getElementById('picker');
+  var loadingEl = document.getElementById('loading');
+  var loadingText = document.getElementById('loading-text');
+  var pending = false;
+
+  function normalize(value) {
+    var u = (value || '').trim();
+    if (!u) return '';
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    return u.replace(/\/+$/, '') + '/';
+  }
+  function saved() { try { return localStorage.getItem(STORE_KEY) || ''; } catch (e) { return ''; } }
+  function save(u) { try { localStorage.setItem(STORE_KEY, u); } catch (e) { /* private mode */ } }
+  function host(u) { return u.replace(/^https?:\/\//i, '').replace(/\/$/, ''); }
+  // assign (not replace) so the picker stays in history and Back returns here.
+  function go(u) { window.location.href = u; }
+
+  function showPicker(message) {
+    pending = false;
+    loadingEl.hidden = true;
+    pickerEl.hidden = false;
+    statusEl.textContent = message || 'Choose an instance';
+    var input = document.getElementById('url');
+    if (input && !input.value) input.value = saved();
+    var first = document.querySelector('#presets button');
+    if (first) { try { first.focus(); } catch (e) { /* ignore */ } }
+  }
+
+  function showLoading(label) {
+    pending = true;
+    pickerEl.hidden = true;
+    loadingEl.hidden = false;
+    loadingText.textContent = label;
+  }
+
+  // Resolves true if the instance answers, false on network failure/timeout.
+  function probe(u) {
+    return new Promise(function (resolve) {
+      if (typeof fetch !== 'function' || typeof AbortController === 'undefined') { resolve(true); return; }
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, 5000);
+      fetch(u, { mode: 'no-cors', cache: 'no-store', signal: controller.signal }).then(
+        function () { clearTimeout(timer); resolve(true); },
+        function () { clearTimeout(timer); resolve(false); }
+      );
+    });
+  }
+
+  // Confirm the instance is alive, then redirect as soon as it answers.
+  function connect(u) {
+    showLoading('Checking ' + host(u) + '\u2026');
+    probe(u).then(function (alive) {
+      if (!pending) return; // cancelled
+      if (alive) go(u);
+      else showPicker("Couldn't reach " + host(u) + ". Choose an instance.");
+    });
+  }
+
+  // Any button during the check returns to the picker.
+  window.addEventListener('keydown', function () { if (pending) showPicker(); }, true);
+
+  var wrap = document.getElementById('presets');
+  PRESETS.forEach(function (preset) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = preset.flag + '  ' + host(preset.url);
+    b.addEventListener('click', function () { save(preset.url); connect(preset.url); });
+    wrap.appendChild(b);
+  });
+
+  document.getElementById('custom').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var u = normalize(document.getElementById('url').value);
+    if (u) { save(u); connect(u); }
+  });
+
+  // `?instance=` is accepted for programmatic use.
+  var requested = null;
+  try { requested = new URLSearchParams(location.search).get('instance'); } catch (e) { /* ignore */ }
+  var current = saved();
+  var forcePick = /[?&]pick(=1)?(&|$)/.test(location.search);
+
+  if (requested) {
+    var chosen = normalize(requested);
+    if (chosen) { save(chosen); connect(chosen); return; }
+  }
+  // First launch: wait for a choice. Later launches: verify, then connect.
+  if (current && !forcePick) connect(current);
+  else showPicker();
+})();
+</script>
+</body>
+</html>

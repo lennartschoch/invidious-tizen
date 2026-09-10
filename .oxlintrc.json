@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "env": { "browser": true, "node": true },
+  "ignorePatterns": ["dist/**"],
+  "categories": { "correctness": "error", "suspicious": "warn" },
+  "rules": {
+    "no-underscore-dangle": "off",
+    "unicorn/prefer-add-event-listener": "off"
+  }
+}

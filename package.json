@@ -1,0 +1,46 @@
+{
+  "name": "invidious-tizen",
+  "appName": "Invidious TV",
+  "version": "0.1.0",
+  "description": "TV remote support (D-pad navigation and media keys) for a self-hosted Invidious instance, loaded through TizenBrew.",
+  "packageType": "mods",
+  "websiteURL": "https://lennartschoch.github.io/invidious-tizen/dist/index.html",
+  "main": "dist/userScript.js",
+  "keys": [
+    "MediaPlayPause",
+    "MediaPlay",
+    "MediaPause",
+    "MediaStop",
+    "MediaRewind",
+    "MediaFastForward",
+    "MediaTrackPrevious",
+    "MediaTrackNext"
+  ],
+  "scripts": {
+    "build": "npm run check && npm run format:check && npm run lint && esbuild src/userscript/index.ts --bundle --format=iife --target=chrome69 --outfile=dist/userScript.js && node -e \"require('fs').copyFileSync('src/picker/index.html','dist/index.html')\"",
+    "check": "tsc --noEmit",
+    "lint": "oxlint src test",
+    "lint:fix": "oxlint --fix src test",
+    "format": "oxfmt --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format:check": "oxfmt --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "watch": "esbuild src/userscript/index.ts --bundle --format=iife --target=chrome69 --outfile=dist/userScript.js --watch",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node test/e2e.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.0.1",
+    "oxfmt": "^0.67.0",
+    "oxlint": "^1.82.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  },
+  "author": "Lennart Schoch",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lennartschoch/invidious-tizen"
+  }
+}
