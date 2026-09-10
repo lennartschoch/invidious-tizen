@@ -56,6 +56,7 @@ oxlint is the linter; adding ESLint back means dropping TS 7.
 | Instance stored on the Pages origin | The userscript runs on the instance origin and cannot read the Pages origin, so the picker is the single source of truth for the selected instance. |
 | Picker probes before connecting | A `no-cors` fetch with a 5s abort; on failure it stays on the picker instead of dumping the user on an error page. |
 | Picker uses `location.href` (assign) | Keeps the picker in history so **Back** returns to it. `location.replace` would strand the user. |
+| Picker has its own D-pad navigation | `window.__invidiousPicker` makes the userscript leave the picker's keys alone, so the picker's `moveFocus` (a copy of `src/userscript/navigation.ts`) is the only thing that moves focus there. Do not delete it as duplication. |
 | Player context is narrow | Arrows steer the player only when fullscreen or focus is inside `.video-js`. On a watch page with nothing focused they navigate, so the sidebar/comments stay reachable. Widening this traps the user in the player. |
 | Text-input guard | While focus is in an input/textarea/`contenteditable`, only Back is handled, so the TV keyboard works. Intercepting arrows there breaks typing. |
 | Number keys → percentage | YouTube TV parity: `0–9` jump to 0–90%. Up/Down/OK reveal the player controls; volume stays on the TV's own keys. |

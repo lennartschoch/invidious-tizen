@@ -133,8 +133,74 @@
     });
   }
 
-  // Any button during the check returns to the picker.
-  window.addEventListener('keydown', function () { if (pending) showPicker(); }, true);
+  // Geometric D-pad navigation. Tizen's webview does not move focus between
+  // controls on its own, so the picker walks the layout itself. This mirrors
+  // src/userscript/navigation.ts; the injected userscript leaves the picker's
+  // keys to us (window.__invidiousPicker), so the picker must stay standalone.
+  var FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex],[role="button"]';
+  var ARROWS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
+
+  function isVisible(el) {
+    var rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    var style = window.getComputedStyle(el);
+    return (
+      !style || (style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0')
+    );
+  }
+
+  function centerOf(el) {
+    var r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  // Primary-axis gap plus a penalty for cross-axis misalignment.
+  function score(from, to, dir) {
+    var dx = to.x - from.x;
+    var dy = to.y - from.y;
+    var EPS = 4;
+    if (dir === 'left') return dx >= -EPS ? null : from.x - to.x + Math.abs(dy) * 2;
+    if (dir === 'right') return dx <= EPS ? null : to.x - from.x + Math.abs(dy) * 2;
+    if (dir === 'up') return dy >= -EPS ? null : from.y - to.y + Math.abs(dx) * 2;
+    return dy <= EPS ? null : to.y - from.y + Math.abs(dx) * 2;
+  }
+
+  function moveFocus(dir) {
+    var found = document.querySelectorAll(FOCUSABLE);
+    var els = [];
+    for (var i = 0; i < found.length; i++) {
+      var el = found[i];
+      if (el.disabled || el.getAttribute('tabindex') === '-1') continue;
+      if (isVisible(el)) els.push(el);
+    }
+    if (!els.length) return false;
+
+    var active = document.activeElement;
+    var current = active && active !== document.body && active !== document.documentElement ? active : null;
+    if (!current) { els[0].focus(); return true; }
+
+    var origin = centerOf(current);
+    var best = null;
+    var bestScore = Infinity;
+    for (var j = 0; j < els.length; j++) {
+      if (els[j] === current) continue;
+      var s = score(origin, centerOf(els[j]), dir);
+      if (s !== null && s < bestScore) { bestScore = s; best = els[j]; }
+    }
+    if (!best) return false;
+    best.focus();
+    return true;
+  }
+
+  // Any key during the check cancels it; otherwise the D-pad moves focus.
+  // Arrows stay with the URL input so the TV keyboard and caret work.
+  window.addEventListener('keydown', function (e) {
+    if (pending) { showPicker(); return; }
+    var tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+    var dir = ARROWS[e.keyCode];
+    if (dir && moveFocus(dir)) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
 
   var wrap = document.getElementById('presets');
   PRESETS.forEach(function (preset) {

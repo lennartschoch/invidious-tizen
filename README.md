@@ -11,7 +11,7 @@ A [TizenBrew](https://github.com/reisxd/TizenBrew) module for **Tizen 5.5+** (20
 ![TizenBrew](https://img.shields.io/badge/TizenBrew-module-8A2BE2)
 ![Tizen](https://img.shields.io/badge/Tizen-5.5%2B-1428A0)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
-![tests](https://img.shields.io/badge/tests-23%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-25%20passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 <br>
@@ -38,7 +38,7 @@ Tizen's browser only hands a web page six keys — D-pad, Enter and Back. Media 
 ## 🚀 Install
 
 1. Install **TizenBrew** on the TV with the [TizenBrew Installer](https://github.com/reisxd/TizenBrewInstaller/releases) (enable Developer Mode, set the Host PC IP, reboot — see the [guide](https://github.com/reisxd/TizenBrew/blob/main/docs/README.md)).
-2. In TizenBrew → **Add module** → type **GitHub** → name `lennartschoch/invidious-tizen` (pin a version with `…@v0.1.0`).
+2. In TizenBrew → **Add module** → type **GitHub** → name `lennartschoch/invidious-tizen` (pin a version with `…@v0.1.1`).
 3. **Launch "Invidious TV"** and pick an instance.
 
 > The repo must be public: TizenBrew fetches the module and userscript from jsDelivr, and the picker from GitHub Pages — same layout as [TizenPortal](https://github.com/axelnanol/tizenportal) (`websiteURL` → `…/dist/index.html`).

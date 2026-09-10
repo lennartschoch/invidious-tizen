@@ -29,6 +29,37 @@ describe('instance picker', () => {
     expect(win.document.getElementById('status').textContent).toBe('Choose an instance');
   });
 
+  it('moves focus with the D-pad', () => {
+    const win = load();
+    const buttons = Array.from(win.document.querySelectorAll('#presets button')) as any[];
+    win.Element.prototype.getBoundingClientRect = function (this: any) {
+      const i = buttons.indexOf(this);
+      const y = i * 60;
+      return { x: 0, y, left: 0, top: y, width: 400, height: 40, right: 400, bottom: y + 40 };
+    };
+    const press = (code: number): boolean => {
+      const e = new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
+      Object.defineProperty(e, 'keyCode', { get: () => code });
+      win.document.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+
+    expect(win.document.activeElement).toBe(buttons[0]);
+    expect(press(40)).toBe(true); // ArrowDown
+    expect(win.document.activeElement).toBe(buttons[1]);
+  });
+
+  it('does not hijack arrows while typing in the URL box', () => {
+    const win = load();
+    const input = win.document.getElementById('url');
+    input.focus();
+    const e = new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
+    Object.defineProperty(e, 'keyCode', { get: () => 40 });
+    win.document.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(false);
+    expect(win.document.activeElement).toBe(input);
+  });
+
   it('saves a preset when chosen', () => {
     const win = load();
     win.document.querySelectorAll('#presets button')[0].click();

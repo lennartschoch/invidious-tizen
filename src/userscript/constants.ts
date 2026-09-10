@@ -24,7 +24,7 @@ export const ARROW: { readonly [code: number]: Direction } = {
   40: 'down',
 };
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 
 /** GitHub Pages URL of the instance picker (built from src/picker). */
 export const PICKER_URL = 'https://lennartschoch.github.io/invidious-tizen/dist/index.html';
