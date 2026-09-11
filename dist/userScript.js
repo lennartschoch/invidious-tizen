@@ -21,7 +21,7 @@
     39: "right",
     40: "down"
   };
-  var VERSION = "0.1.3";
+  var VERSION = "0.2.0";
   var PICKER_URL = "https://lennartschoch.github.io/invidious-tizen/dist/index.html";
 
   // src/userscript/components/comment.ts

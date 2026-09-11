@@ -1,7 +1,7 @@
 {
   "name": "invidious-tizen",
   "appName": "Invidious TV",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "TV remote support (D-pad navigation and media keys) for a self-hosted Invidious instance, loaded through TizenBrew.",
   "packageType": "mods",
   "websiteURL": "https://lennartschoch.github.io/invidious-tizen/dist/index.html",
