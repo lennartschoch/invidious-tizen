@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl unzip xvfb xauth socat \
+    ca-certificates curl unzip xvfb xauth socat matchbox-window-manager \
     libgtk-3-0 libnss3 libnspr4 libasound2 libgbm1 libxshmfence1 \
     libxdamage1 libxcomposite1 libxrandr2 libxfixes3 libxrender1 \
     libatk1.0-0 libatk-bridge2.0-0 libatspi2.0-0 libcups2 libdbus-1-3 \
@@ -11,8 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Electron 4.x == Chromium 69.0.3497.106, and official Electron builds ship
 # Chrome-branded FFmpeg (H.264/AAC), unlike the open-source Chromium snapshots.
+# Prebuilt for both x64 and arm64, so on Apple Silicon we can run arm64 natively
+# (no Rosetta) — same Chromium 69 as the TV, but fast enough to decode video.
 ARG EV=4.2.12
-RUN curl -fsSL "https://github.com/electron/electron/releases/download/v${EV}/electron-v${EV}-linux-x64.zip" -o /tmp/e.zip \
+ARG EARCH=x64
+RUN curl -fsSL "https://github.com/electron/electron/releases/download/v${EV}/electron-v${EV}-linux-${EARCH}.zip" -o /tmp/e.zip \
  && unzip -q /tmp/e.zip -d /opt/electron \
  && rm /tmp/e.zip \
  && ln -s /opt/electron/electron /usr/local/bin/electron

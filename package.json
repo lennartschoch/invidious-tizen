@@ -27,7 +27,9 @@
     "pretest": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "node test/e2e.mjs"
+    "test:e2e": "node test/e2e.mjs",
+    "preplayground": "npm run build",
+    "playground": "node test/playground.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

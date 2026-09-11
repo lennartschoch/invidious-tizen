@@ -162,6 +162,26 @@ npm run test:e2e            # INVIDIOUS_URL / TEST_VIDEO override the defaults
 scripts/chrome69.sh down
 ```
 
+### Playground
+
+Drive that same Chromium 69 by hand, keyboard-only, exactly like the TV. It
+streams the real render (focus ring included) to `http://localhost:7331` and
+forwards **only** your keystrokes as input, so the mouse never touches the page:
+
+```bash
+scripts/chrome69.sh up
+npm run playground --instance invidious.example.com
+# then open http://localhost:7331 and click once
+# ←/→/↑/↓ D-pad · Enter OK · Space play/pause · Esc Back · letters type into search
+scripts/chrome69.sh down
+```
+
+`--instance <host>` (or `--instance=<host>`) chooses what to load — `https://` is
+added if omitted; `PLAYGROUND_URL`/`INVIDIOUS_URL` also work. `PORT` changes the
+viewer port (default 7331 — macOS AirPlay owns 7000). Fullscreen is emulated
+(Electron 4 can't do real fullscreen under Xvfb); the player is styled fullscreen
+so OK/Back still behave like the TV.
+
 ## ⚠️ Notes
 
 - `inv.nadeko.net` runs a **"Go-away" CAPTCHA**, so it may challenge the webview before it works — pick another instance if it does.

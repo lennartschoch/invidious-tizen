@@ -81,10 +81,19 @@ appearing, suspect a markup change there, not this repo.
   stubbed through a `data-box` attribute) and the picker.
 - **E2E:** `scripts/chrome69.sh up` (Apple `container`, macOS), then
   `npm run test:e2e`, then `scripts/chrome69.sh down`. This runs the real
-  instance in **Chromium 69 with H.264**. Open-source Chromium 69 builds lack
-  H.264, so playback checks only pass on the vendored Electron 4 build
-  (`test/browser69/`). Software decode under Rosetta is slow — the harness polls
-  rather than asserting on a fixed delay.
+  instance in **Chromium 69 with H.264**. Open-source Chromium 69 lacks H.264, so
+  playback checks only pass on the vendored Electron 4 build (`test/browser69/`).
+  It defaults to the host arch — on Apple Silicon that is native arm64 (Electron
+  ships `linux-arm64` Chromium 69 + H.264), so video decodes without Rosetta;
+  `ARCH=amd64` reproduces the slow Rosetta path. `/dev/shm` is tiny in the
+  container, so `--disable-dev-shm-usage` is required or the renderer crashes
+  mid-decode. There is no sound card; the ALSA errors are harmless (do not point
+  ALSA at a `null` device — with no timing, Chromium's audio clock runs free and
+  video plays at several times speed).
+- **Playground:** `npm run playground --instance <host>` (after `chrome69.sh up`)
+  streams that same Chromium 69 to `http://localhost:7331` and forwards
+  keyboard-only CDP input, so navigation can be tried by hand on the real engine.
+  `test/playground.mjs`.
 - **TV-only:** the `tizen.tvinputdevice` registration path cannot be exercised
   off-device. Confirm key handling on the TV itself.
 
