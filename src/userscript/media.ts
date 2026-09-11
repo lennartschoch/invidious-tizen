@@ -88,11 +88,11 @@ export const pausePlayback = (): boolean => {
   return true;
 };
 
-export const seekBy = (delta: number): boolean => {
+export const seekBy = (delta: number, hint = true): boolean => {
   const m = media();
   if (!m) return false;
   m.seekTo(m.time() + delta);
-  showHint((delta > 0 ? '+ ' : '') + delta + 's');
+  if (hint) showHint((delta > 0 ? '+ ' : '') + delta + 's');
   return true;
 };
 
@@ -112,6 +112,33 @@ export const revealControls = (): boolean => {
   const m = media();
   if (!m) return false;
   m.revealControls();
+  return true;
+};
+
+/** Hide the player controls (and let video.js drop its active state). */
+export const hideControls = (): boolean => {
+  const p = player();
+  if (!p) return false;
+  if (typeof p.userActive === 'function') p.userActive(false);
+  return true;
+};
+
+export const volume = (): number => {
+  const p = player();
+  return p ? p.volume() : 0;
+};
+
+export const setVolume = (fraction: number): boolean => {
+  const p = player();
+  if (!p) return false;
+  p.volume(Math.max(0, Math.min(1, fraction)));
+  return true;
+};
+
+export const toggleMute = (): boolean => {
+  const p = player();
+  if (!p) return false;
+  p.muted(!p.muted());
   return true;
 };
 

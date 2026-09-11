@@ -190,11 +190,11 @@
     m.pause();
     return true;
   };
-  var seekBy = (delta) => {
+  var seekBy = (delta, hint = true) => {
     const m = media();
     if (!m) return false;
     m.seekTo(m.time() + delta);
-    showHint((delta > 0 ? "+ " : "") + delta + "s");
+    if (hint) showHint((delta > 0 ? "+ " : "") + delta + "s");
     return true;
   };
   var seekPercent = (tenths) => {
@@ -210,6 +210,18 @@
     const m = media();
     if (!m) return false;
     m.revealControls();
+    return true;
+  };
+  var hideControls = () => {
+    const p = player();
+    if (!p) return false;
+    if (typeof p.userActive === "function") p.userActive(false);
+    return true;
+  };
+  var toggleMute = () => {
+    const p = player();
+    if (!p) return false;
+    p.muted(!p.muted());
     return true;
   };
   var isFullscreen = () => {
@@ -266,6 +278,212 @@
   };
 
   // src/userscript/components/player.ts
+  var HIDE_MS = 2e3;
+  var ITEMS = [
+    ".vjs-play-control",
+    ".vjs-volume-panel",
+    ".vjs-progress-control",
+    ".vjs-captions-button",
+    ".vjs-http-source-selector",
+    ".vjs-fullscreen-control"
+  ].join(",");
+  var mode = "watching";
+  var index = 0;
+  var menuOwner = null;
+  var hideTimer = null;
+  var fullscreen = () => !!document.fullscreenElement || isFullscreen();
+  var visible = (el) => {
+    if (!el || el.classList.contains("vjs-hidden")) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  var focusEl = (el) => {
+    if (!el) return;
+    if (!el.hasAttribute("tabindex") && !el.matches("button, a[href], input, select, textarea")) {
+      el.setAttribute("tabindex", "-1");
+    }
+    el.focus();
+  };
+  var items = (root) => {
+    const bar = root.querySelector(".vjs-control-bar") || root;
+    const found = bar.querySelectorAll(ITEMS);
+    const out = [];
+    for (let i = 0; i < found.length; i++) {
+      const el = found[i];
+      if (!visible(el)) continue;
+      let dup = false;
+      for (let j = 0; j < out.length; j++) {
+        if (out[j].contains(el)) {
+          dup = true;
+          break;
+        }
+      }
+      if (!dup) out.push(el);
+    }
+    return out;
+  };
+  var clearTimer = () => {
+    if (hideTimer !== null) clearTimeout(hideTimer);
+    hideTimer = null;
+  };
+  var resetTimer = (root) => {
+    clearTimer();
+    revealControls();
+    hideTimer = setTimeout(() => hide(root), HIDE_MS);
+  };
+  var hide = (root) => {
+    clearTimer();
+    mode = "watching";
+    menuOwner = null;
+    hideControls();
+    root.focus();
+  };
+  var focusItem = (root, next) => {
+    const list = items(root);
+    if (!list.length) return;
+    index = (next + list.length) % list.length;
+    focusEl(list[index]);
+  };
+  var focusOwner = (root, owner) => {
+    const list = items(root);
+    const at = list.indexOf(owner);
+    focusItem(root, at >= 0 ? at : 0);
+  };
+  var menuItems = (owner) => {
+    const all = Array.from(owner.querySelectorAll(".vjs-menu-item"));
+    return all.filter((el) => visible(el) && !el.classList.contains("vjs-texttrack-settings"));
+  };
+  var menuButton = (owner) => owner.querySelector("button");
+  var openMenu = (owner) => {
+    const button = menuButton(owner);
+    if (!button) return;
+    button.click();
+    const options = menuItems(owner);
+    if (!options.length) return;
+    mode = "menu";
+    menuOwner = owner;
+    index = 0;
+    focusEl(options[0]);
+  };
+  var showControls = (root) => {
+    revealControls();
+    mode = "controls";
+    focusItem(root, 0);
+    resetTimer(root);
+  };
+  var watching = (dir, code) => {
+    if (dir === "left") return seekBy(-10);
+    if (dir === "right") return seekBy(10);
+    if (dir === "up") return revealControls();
+    if (code === KEYS.ENTER) return togglePlay();
+    return false;
+  };
+  var controls = (dir, code, root) => {
+    if (dir === "left" || dir === "right") {
+      focusItem(root, index + (dir === "left" ? -1 : 1));
+      resetTimer(root);
+      return true;
+    }
+    if (dir === "up" || dir === "down") {
+      resetTimer(root);
+      return true;
+    }
+    if (code === KEYS.BACK || code === KEYS.ESCAPE) {
+      hide(root);
+      return true;
+    }
+    if (code !== KEYS.ENTER) return false;
+    const item = items(root)[index];
+    if (!item) return false;
+    if (item.matches(".vjs-play-control")) {
+      togglePlay();
+      resetTimer(root);
+      return true;
+    }
+    if (item.matches(".vjs-volume-panel")) {
+      toggleMute();
+      resetTimer(root);
+      return true;
+    }
+    if (item.matches(".vjs-progress-control")) {
+      mode = "scrub";
+      focusEl(item);
+      resetTimer(root);
+      return true;
+    }
+    if (item.matches(".vjs-fullscreen-control")) {
+      exitFullscreen();
+      hide(root);
+      return true;
+    }
+    openMenu(item);
+    return true;
+  };
+  var scrub = (dir, code, root) => {
+    if (dir === "left") {
+      seekBy(-10, false);
+      resetTimer(root);
+      return true;
+    }
+    if (dir === "right") {
+      seekBy(10, false);
+      resetTimer(root);
+      return true;
+    }
+    if (dir === "up" || dir === "down") {
+      resetTimer(root);
+      return true;
+    }
+    if (code === KEYS.ENTER) {
+      mode = "controls";
+      const progress = root.querySelector(".vjs-progress-control");
+      if (progress) focusOwner(root, progress);
+      resetTimer(root);
+      return true;
+    }
+    if (code === KEYS.BACK || code === KEYS.ESCAPE) {
+      mode = "controls";
+      const progress = root.querySelector(".vjs-progress-control");
+      if (progress) focusOwner(root, progress);
+      resetTimer(root);
+      return true;
+    }
+    return false;
+  };
+  var menuMode = (dir, code, root) => {
+    const owner = menuOwner;
+    if (!owner) return false;
+    const options = menuItems(owner);
+    if (dir === "up" || dir === "down") {
+      if (!options.length) return false;
+      index = (index + (dir === "up" ? -1 : 1) + options.length) % options.length;
+      focusEl(options[index]);
+      resetTimer(root);
+      return true;
+    }
+    if (dir === "left" || dir === "right") {
+      resetTimer(root);
+      return true;
+    }
+    if (code === KEYS.ENTER) {
+      if (options[index]) options[index].click();
+      mode = "controls";
+      menuOwner = null;
+      focusOwner(root, owner);
+      resetTimer(root);
+      return true;
+    }
+    if (code === KEYS.BACK || code === KEYS.ESCAPE) {
+      const button = menuButton(owner);
+      if (button) button.click();
+      mode = "controls";
+      menuOwner = null;
+      focusOwner(root, owner);
+      resetTimer(root);
+      return true;
+    }
+    return false;
+  };
   var player2 = {
     selector: ".video-js",
     skip: (el) => {
@@ -273,19 +491,42 @@
       return !!root && root !== el;
     },
     key: (root, code, dir, ctx) => {
-      if (dir) {
-        if (dir === "left") return seekBy(-10);
-        if (dir === "right") return seekBy(10);
-        const vertical = dir === "up" || dir === "down";
-        return vertical && !document.fullscreenElement && ctx.moveFocusOutside(root, dir) || revealControls();
+      if (!fullscreen()) {
+        mode = "watching";
+        clearTimer();
+        if (dir) {
+          if (dir === "left") return seekBy(-10);
+          if (dir === "right") return seekBy(10);
+          const vertical = dir === "up" || dir === "down";
+          return vertical && ctx.moveFocusOutside(root, dir) || revealControls();
+        }
+        if (code === KEYS.ENTER) {
+          enterFullscreen();
+          play();
+          return true;
+        }
+        return false;
       }
-      if (code === KEYS.ENTER) {
-        if (document.fullscreenElement || isFullscreen()) return togglePlay();
-        enterFullscreen();
-        play();
-        return true;
+      if (mode === "watching") {
+        if (dir === "down") {
+          showControls(root);
+          return true;
+        }
+        return watching(dir, code);
       }
-      return false;
+      if (dir || code === KEYS.ENTER || code === KEYS.BACK || code === KEYS.ESCAPE) {
+        resetTimer(root);
+      }
+      switch (mode) {
+        case "controls":
+          return controls(dir, code, root);
+        case "scrub":
+          return scrub(dir, code, root);
+        case "menu":
+          return menuMode(dir, code, root);
+        default:
+          return false;
+      }
     }
   };
 

@@ -45,7 +45,7 @@ const activeId = (win: Win): string | null => {
 
 function playerStub(win: Win) {
   const calls: string[] = [];
-  const state = { t: 40, paused: true, dur: 200 };
+  const state = { t: 40, paused: true, dur: 200, vol: 1, fs: false, muted: false };
   win.player = {
     play() {
       calls.push('play');
@@ -72,6 +72,25 @@ function playerStub(win: Win) {
     },
     controls(v?: boolean) {
       calls.push('controls:' + !!v);
+    },
+    volume(v?: number) {
+      if (v === undefined) return state.vol;
+      calls.push('volume:' + v.toFixed(2));
+      state.vol = v;
+      return v;
+    },
+    muted(v?: boolean) {
+      if (v === undefined) return state.muted;
+      calls.push('muted:' + v);
+      state.muted = v;
+      return v;
+    },
+    isFullscreen() {
+      return state.fs;
+    },
+    exitFullscreen() {
+      calls.push('exitFullscreen');
+      state.fs = false;
     },
   };
   return { calls, state };
@@ -168,6 +187,33 @@ const PLAYER_CONTROLS_HTML = `
     <button class="vjs-play-control" id="ctrl" data-box="0,330,40,30">play</button>
   </div>
   <a id="below" href="/x" data-box="0,400,640,40">below</a>`;
+
+const PLAYER_BAR_HTML = `
+  <div class="video-js" id="vjs" data-box="0,0,640,360" tabindex="0">
+    <button class="vjs-play-control" id="p-play" data-box="0,320,40,40">play</button>
+    <div class="vjs-volume-panel" id="p-vol" data-box="60,320,80,40">
+      <button class="vjs-mute-control" data-box="60,320,40,40">mute</button>
+      <div class="vjs-volume-control"><div class="vjs-volume-bar" id="p-volbar" data-box="100,320,40,40" aria-label="Volume Level"></div></div>
+    </div>
+    <div class="vjs-progress-control" id="p-prog" data-box="150,320,120,40"><div class="vjs-progress-holder" data-box="150,330,120,10"></div></div>
+    <div class="vjs-captions-button" id="p-caps" data-box="155,320,40,40">
+      <button id="p-capsbtn" data-box="155,320,40,40">cc</button>
+      <div class="vjs-menu"><ul class="vjs-menu-content">
+        <li class="vjs-menu-item vjs-texttrack-settings" id="p-settings" data-box="160,230,80,20">Caption settings</li>
+        <li class="vjs-menu-item" id="p-opt1" data-box="160,250,80,20">English</li>
+        <li class="vjs-menu-item" id="p-opt2" data-box="160,270,80,20">Off</li>
+      </ul></div>
+    </div>
+    <div class="vjs-http-source-selector" id="p-quality" data-box="180,320,40,40">
+      <button id="p-qualitybtn" data-box="180,320,40,40">q</button>
+      <div class="vjs-menu"><ul class="vjs-menu-content">
+        <li class="vjs-menu-item" id="p-q1" data-box="180,250,80,20">1080p</li>
+        <li class="vjs-menu-item" id="p-q2" data-box="180,270,80,20">720p</li>
+      </ul></div>
+    </div>
+    <button class="vjs-fullscreen-control" id="p-fs" data-box="600,320,40,40">fs</button>
+    <button class="vjs-share-control" id="p-share" data-box="550,320,40,40">share</button>
+  </div>`;
 
 // A search grid whose first cell is a channel card: its name link is x-aligned
 // with the navbar but lower, which used to win and skip the first row.
@@ -347,6 +393,140 @@ describe('D-pad navigation', () => {
     expect(activeId(win)).toBe('vjs');
     press(win, 40); // leaves the player, skipping the control button
     expect(activeId(win)).toBe('below');
+  });
+
+  it('fullscreen: Down opens the bar focused on play', () => {
+    const win = setup(PLAYER_BAR_HTML);
+    playerStub(win);
+    Object.defineProperty(win.document, 'fullscreenElement', {
+      get: () => win.document.getElementById('vjs'),
+      configurable: true,
+    });
+    win.document.getElementById('vjs').focus();
+    press(win, 40);
+    expect(activeId(win)).toBe('p-play');
+  });
+
+  it('fullscreen: left/right move between items and skip share', () => {
+    const win = setup(PLAYER_BAR_HTML);
+    playerStub(win);
+    Object.defineProperty(win.document, 'fullscreenElement', {
+      get: () => win.document.getElementById('vjs'),
+      configurable: true,
+    });
+    win.document.getElementById('vjs').focus();
+    press(win, 40); // open -> play
+    press(win, 39);
+    expect(activeId(win)).toBe('p-vol');
+    press(win, 39);
+    expect(activeId(win)).toBe('p-prog');
+    press(win, 39);
+    expect(activeId(win)).toBe('p-caps');
+    press(win, 39);
+    expect(activeId(win)).toBe('p-quality');
+    press(win, 39);
+    expect(activeId(win)).toBe('p-fs'); // share skipped
+    press(win, 39);
+    expect(activeId(win)).toBe('p-play'); // wraps
+  });
+
+  it('fullscreen: OK on the volume item toggles mute (no slider)', () => {
+    const win = setup(PLAYER_BAR_HTML);
+    const { calls } = playerStub(win);
+    Object.defineProperty(win.document, 'fullscreenElement', {
+      get: () => win.document.getElementById('vjs'),
+      configurable: true,
+    });
+    win.document.getElementById('vjs').focus();
+    press(win, 40); // open -> play
+    press(win, 39); // -> volume
+    press(win, 13); // OK -> mute
+    expect(calls).toContain('muted:true');
+    expect(activeId(win)).toBe('p-vol');
+  });
+
+  it('fullscreen: OK on the timeline focuses it and left/right skip', () => {
+    const win = setup(PLAYER_BAR_HTML);
+    const { state } = playerStub(win);
+    Object.defineProperty(win.document, 'fullscreenElement', {
+      get: () => win.document.getElementById('vjs'),
+      configurable: true,
+    });
+    win.document.getElementById('vjs').focus();
+    press(win, 40); // open -> play
+    press(win, 39);
+    press(win, 39); // -> progress
+    expect(activeId(win)).toBe('p-prog');
+    press(win, 13); // select timeline
+    press(win, 37);
+    expect(state.t).toBe(30);
+    expect(win.document.querySelector('.itv-hint')).toBeNull(); // no overlay over the bar
+    press(win, 39);
+    expect(state.t).toBe(40);
+    press(win, 13); // OK again unselects the timeline
+    press(win, 39);
+    expect(activeId(win)).toBe('p-caps');
+  });
+
+  it('fullscreen: captions menu opens but skips Caption settings', () => {
+    const win = setup(PLAYER_BAR_HTML);
+    playerStub(win);
+    Object.defineProperty(win.document, 'fullscreenElement', {
+      get: () => win.document.getElementById('vjs'),
+      configurable: true,
+    });
+    win.document.getElementById('vjs').focus();
+    press(win, 40); // open -> play
+    press(win, 39);
+    press(win, 39);
+    press(win, 39); // -> captions
+    expect(activeId(win)).toBe('p-caps');
+    press(win, 13); // open menu -> first real item, not Caption settings
+    expect(activeId(win)).toBe('p-opt1');
+    press(win, 38); // up wraps to the last real item (settings skipped)
+    expect(activeId(win)).toBe('p-opt2');
+    let selected = false;
+    win.document.getElementById('p-opt2').addEventListener('click', () => {
+      selected = true;
+    });
+    press(win, 13); // select
+    expect(selected).toBe(true);
+    expect(activeId(win)).toBe('p-caps'); // back on the item
+  });
+
+  it('fullscreen: OK on the fullscreen control exits', () => {
+    const win = setup(PLAYER_BAR_HTML);
+    const { calls, state } = playerStub(win);
+    state.fs = true;
+    Object.defineProperty(win.document, 'fullscreenElement', {
+      get: () => win.document.getElementById('vjs'),
+      configurable: true,
+    });
+    win.document.getElementById('vjs').focus();
+    press(win, 40); // open -> play
+    press(win, 39);
+    press(win, 39);
+    press(win, 39);
+    press(win, 39);
+    press(win, 39); // -> fullscreen
+    expect(activeId(win)).toBe('p-fs');
+    press(win, 13);
+    expect(calls).toContain('exitFullscreen');
+  });
+
+  it('fullscreen watching: left/right seek', () => {
+    const win = setup(PLAYER_BAR_HTML);
+    const { state } = playerStub(win);
+    Object.defineProperty(win.document, 'fullscreenElement', {
+      get: () => win.document.getElementById('vjs'),
+      configurable: true,
+    });
+    win.document.getElementById('vjs').focus();
+    press(win, 37);
+    expect(state.t).toBe(30);
+    expect(win.document.querySelector('.itv-hint')?.classList.contains('itv-show')).toBe(true);
+    press(win, 39);
+    expect(state.t).toBe(40);
   });
 
   it('focuses video thumbnails that Invidious marks tabindex="-1"', () => {
