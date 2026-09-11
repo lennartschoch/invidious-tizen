@@ -38,7 +38,7 @@ Tizen's browser only hands a web page six keys — D-pad, Enter and Back. Media 
 ## 🚀 Install
 
 1. Install **TizenBrew** on the TV with the [TizenBrew Installer](https://github.com/reisxd/TizenBrewInstaller/releases) (enable Developer Mode, set the Host PC IP, reboot — see the [guide](https://github.com/reisxd/TizenBrew/blob/main/docs/README.md)).
-2. In TizenBrew → **Add module** → type **GitHub** → name `lennartschoch/invidious-tizen` (pin a version with `…@v0.2.0`).
+2. In TizenBrew → **Add module** → type **GitHub** → name `lennartschoch/invidious-tizen` (pin a version with `…@v0.2.1`).
 3. **Launch "Invidious TV"** and pick an instance.
 
 > The repo must be public: TizenBrew fetches the module and userscript from jsDelivr, and the picker from GitHub Pages — same layout as [TizenPortal](https://github.com/axelnanol/tizenportal) (`websiteURL` → `…/dist/index.html`).
