@@ -36,9 +36,16 @@ const isActivatable = (el: Element | null): boolean => {
 
 /** YouTube TV-style: OK selects a video, so on a watch page it focuses the
  *  player and enters fullscreen playback; in fullscreen it toggles play/pause.
- *  A real player control (big play button, control bar) is left to the browser. */
+ *  A real player control (big play button, control bar) is left to the browser,
+ *  except the play overlay which also goes fullscreen. */
 const onEnter = (): boolean => {
-  if (isActivatable(document.activeElement)) return false; // let the browser activate it
+  const active = document.activeElement;
+  if (active && active.closest && active.closest('.vjs-big-play-button')) {
+    enterFullscreen();
+    play();
+    return true;
+  }
+  if (isActivatable(active)) return false; // let the browser activate it
   if (document.fullscreenElement || isFullscreen()) return togglePlay();
   if (!hasMedia()) return false;
   focusPlayer();
@@ -71,20 +78,25 @@ const onKeyDown = (e: KeyboardEvent): void => {
   if (window.__invidiousPicker) return;
 
   const code = e.keyCode;
-  // Let the TV keyboard work; only Back is intercepted while typing.
-  if (isTextInput(document.activeElement) && code !== KEYS.BACK) return;
+  const dir = ARROW[code];
+  // While typing, leave the TV keyboard alone — except Back, and Up/Down on a
+  // single-line input, which Invidious autofocuses on the home/search pages and
+  // would otherwise trap the D-pad there. Left/Right stay for the caret.
+  const active = document.activeElement;
+  if (isTextInput(active) && code !== KEYS.BACK) {
+    const singleLine = !!active && active.tagName === 'INPUT';
+    if (!(singleLine && (dir === 'up' || dir === 'down'))) return;
+  }
 
   let handled: boolean;
-  const dir = ARROW[code];
   if (dir) {
     if (inPlayerContext()) {
       const player = document.querySelector('.video-js');
-      const leaveDown =
-        dir === 'down' && !document.fullscreenElement && player
-          ? moveFocusOutside(player, 'down')
-          : false;
+      const vertical = dir === 'up' || dir === 'down';
+      const leave =
+        vertical && !document.fullscreenElement && player ? moveFocusOutside(player, dir) : false;
       handled =
-        dir === 'left' ? seekBy(-10) : dir === 'right' ? seekBy(10) : leaveDown || revealControls();
+        dir === 'left' ? seekBy(-10) : dir === 'right' ? seekBy(10) : leave || revealControls();
     } else {
       handled = moveFocus(dir);
     }

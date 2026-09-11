@@ -108,6 +108,16 @@ const WATCH_CONTENT_HTML = `
   <a id="info" href="/channel/1" data-box="0,380,640,40">channel</a>
   <a id="comments" href="/comments" data-box="0,440,640,40">comments</a>`;
 
+const WATCH_ABOVE_HTML = `
+  <a id="nav" href="/" data-box="0,0,640,40">nav</a>
+  <div class="video-js" id="vjs" data-box="0,60,640,360" tabindex="0"></div>
+  <a id="info" href="/channel/1" data-box="0,440,640,40">channel</a>`;
+
+const BIGPLAY_HTML = `
+  <div class="video-js" id="vjs" data-box="0,0,640,360" tabindex="0">
+    <button class="vjs-big-play-button" id="big" data-box="0,0,80,80">play</button>
+  </div>`;
+
 const PREFS_HTML = `
   <div class="h-box">
     <form class="pure-form pure-form-aligned" action="/preferences?referer=%2F">
@@ -171,14 +181,18 @@ describe('D-pad navigation', () => {
     expect(activeId(win)).toBe('r2');
   });
 
-  it('does not hijack arrows while typing in an input', () => {
+  it('lets Up/Down leave a single-line input but keeps Left/Right for the caret', () => {
     const win = setup(INPUT_HTML);
     const { calls } = playerStub(win);
-    win.document.getElementById('search').focus();
-    press(win, 40);
-    expect(activeId(win)).toBe('search');
-    press(win, 53); // '5'
+    const search = win.document.getElementById('search');
+    search.focus();
+    press(win, 53); // '5' while typing must not reach the player
     expect(calls).toEqual([]);
+    expect(activeId(win)).toBe('search');
+    press(win, 39); // Left/Right stay in the input for the caret
+    expect(activeId(win)).toBe('search');
+    press(win, 40); // Down leaves the input (Invidious autofocuses it)
+    expect(activeId(win)).toBe('r1');
   });
 
   it('focuses video thumbnails that Invidious marks tabindex="-1"', () => {
@@ -254,6 +268,14 @@ describe('player: YouTube TV parity', () => {
     expect(activeId(win)).toBe('info');
   });
 
+  it('Up leaves the player for the content above', () => {
+    const win = setup(WATCH_ABOVE_HTML);
+    playerStub(win);
+    win.document.getElementById('vjs').focus();
+    press(win, 38);
+    expect(activeId(win)).toBe('nav');
+  });
+
   it('Down in fullscreen reveals controls instead of leaving', () => {
     const win = setup(WATCH_CONTENT_HTML);
     const { calls } = playerStub(win);
@@ -292,6 +314,17 @@ describe('player: YouTube TV parity', () => {
     expect(state.paused).toBe(false);
     press(win, 13);
     expect(state.paused).toBe(true);
+  });
+
+  it('OK on the video.js play overlay enters fullscreen and plays', () => {
+    const win = setup(BIGPLAY_HTML);
+    const { state } = playerStub(win);
+    const fs = vi.fn(() => Promise.resolve());
+    win.document.getElementById('vjs').requestFullscreen = fs;
+    win.document.getElementById('big').focus();
+    press(win, 13);
+    expect(fs).toHaveBeenCalledTimes(1);
+    expect(state.paused).toBe(false);
   });
 
   it('moves focus out of the player after leaving fullscreen', () => {

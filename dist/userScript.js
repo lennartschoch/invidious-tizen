@@ -305,7 +305,13 @@
     return tag === "a" || tag === "button" || tag === "input" || tag === "select" || tag === "textarea" || el.getAttribute("role") === "button";
   };
   var onEnter = () => {
-    if (isActivatable(document.activeElement)) return false;
+    const active = document.activeElement;
+    if (active && active.closest && active.closest(".vjs-big-play-button")) {
+      enterFullscreen();
+      play();
+      return true;
+    }
+    if (isActivatable(active)) return false;
     if (document.fullscreenElement || isFullscreen()) return togglePlay();
     if (!hasMedia()) return false;
     focusPlayer();
@@ -331,14 +337,19 @@
   var onKeyDown = (e) => {
     if (window.__invidiousPicker) return;
     const code = e.keyCode;
-    if (isTextInput(document.activeElement) && code !== KEYS.BACK) return;
-    let handled;
     const dir = ARROW[code];
+    const active = document.activeElement;
+    if (isTextInput(active) && code !== KEYS.BACK) {
+      const singleLine = !!active && active.tagName === "INPUT";
+      if (!(singleLine && (dir === "up" || dir === "down"))) return;
+    }
+    let handled;
     if (dir) {
       if (inPlayerContext()) {
         const player2 = document.querySelector(".video-js");
-        const leaveDown = dir === "down" && !document.fullscreenElement && player2 ? moveFocusOutside(player2, "down") : false;
-        handled = dir === "left" ? seekBy(-10) : dir === "right" ? seekBy(10) : leaveDown || revealControls();
+        const vertical = dir === "up" || dir === "down";
+        const leave = vertical && !document.fullscreenElement && player2 ? moveFocusOutside(player2, dir) : false;
+        handled = dir === "left" ? seekBy(-10) : dir === "right" ? seekBy(10) : leave || revealControls();
       } else {
         handled = moveFocus(dir);
       }

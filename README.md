@@ -11,7 +11,7 @@ A [TizenBrew](https://github.com/reisxd/TizenBrew) module for **Tizen 5.5+** (20
 ![TizenBrew](https://img.shields.io/badge/TizenBrew-module-8A2BE2)
 ![Tizen](https://img.shields.io/badge/Tizen-5.5%2B-1428A0)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
-![tests](https://img.shields.io/badge/tests-37%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-39%20passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 <br>
@@ -60,12 +60,13 @@ Mirrors YouTube TV wherever the buttons exist there.
 | Red / Green / Yellow / Blue | Nothing — YouTube TV ignores them, and so do we |
 
 **Player mode.** Arrows steer the player only when it is fullscreen or focused:
-`←/→` seek, `↑` reveals the controls, and `↓` steps out to the content below
-(so the description, comments and sidebar stay reachable; both reveal controls in
-fullscreen). Volume stays on the TV's own keys, as on YouTube TV. The player is a
-focus stop: **OK** enters fullscreen and starts playback (and toggles play/pause
-while fullscreen). Leaving fullscreen with **Back** returns focus to the page so
-you can keep browsing.
+`←/→` seek, and `↑`/`↓` step out to the content above/below (so the header,
+description, comments and sidebar stay reachable; in fullscreen both reveal the
+controls since there is nowhere to go). Volume stays on the TV's own keys, as on
+YouTube TV. The player is a focus stop: **OK** — including the video's play
+overlay — enters fullscreen and starts playback (and toggles play/pause while
+fullscreen). Leaving fullscreen with **Back** returns focus to the page so you can
+keep browsing.
 
 ## 🧭 The Instance Picker
 
