@@ -2,10 +2,55 @@ import { KEYS } from '../constants';
 import type { KeyContext } from '../registry';
 import type { Component } from '../registry';
 
+/** Marker for a text field that is highlighted but not yet editable, so the
+ *  on-screen keyboard does not pop open just from focusing it. */
+const PENDING = 'data-itv-edit-pending';
+
 export const isTextInput = (el: Element | null): boolean => {
   if (!el) return false;
   const tag = (el.tagName || '').toLowerCase();
   return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable === true;
+};
+
+const editable = (el: Element): el is HTMLInputElement | HTMLTextAreaElement =>
+  el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
+
+const setReadOnly = (el: Element, value: boolean): void => {
+  if (editable(el)) (el as HTMLInputElement).readOnly = value;
+};
+
+/** The field we just activated; its re-focus must not re-enter the read-only
+ *  state (the keyboard should open). */
+let justActivated: Element | null = null;
+
+/** Focus a text field without opening the keyboard; OK starts editing. */
+export const installInputDeferral = (): void => {
+  document.addEventListener(
+    'focusin',
+    (e: Event): void => {
+      const el = e.target;
+      if (!(el instanceof Element) || !editable(el)) return;
+      if (justActivated === el) {
+        justActivated = null;
+        return;
+      }
+      if (!el.hasAttribute(PENDING)) {
+        setReadOnly(el, true);
+        el.setAttribute(PENDING, '1');
+      }
+    },
+    true,
+  );
+  document.addEventListener(
+    'focusout',
+    (e: Event): void => {
+      const el = e.target;
+      if (!(el instanceof Element) || !el.hasAttribute(PENDING)) return;
+      el.removeAttribute(PENDING);
+      setReadOnly(el, false);
+    },
+    true,
+  );
 };
 
 /** Submit the form a single-line input belongs to (e.g. Invidious' search box),
@@ -38,15 +83,26 @@ const caretAtEdge = (input: HTMLInputElement, dir: 'left' | 'right'): boolean =>
   }
 };
 
-/** Text fields. On a single-line `<input>`: Up/Down leave (Invidious
- *  autofocuses the search box, which would trap the D-pad), Left/Right leave at
- *  the caret edge, and OK submits the form. Textareas/contenteditable keep all
- *  arrows and Enter for the TV keyboard. */
+/** Text fields are highlighted on focus but stay read-only until OK, so the TV
+ *  keyboard only appears when the user asks to type. On a single-line `<input>`
+ *  Up/Down leave, Left/Right leave at the caret edge once editing, and OK either
+ *  starts editing or submits. Textareas/contenteditable keep their arrows. */
 export const input: Component = {
   selector: 'input, textarea, [contenteditable]',
   key: (root, code, dir, ctx: KeyContext) => {
     const singleLine = root.tagName === 'INPUT';
-    if (code === KEYS.ENTER) return singleLine && submit(root);
+    if (code === KEYS.ENTER) {
+      if (root.hasAttribute(PENDING)) {
+        // Start editing: drop read-only and re-focus so the keyboard opens.
+        root.removeAttribute(PENDING);
+        setReadOnly(root, false);
+        justActivated = root;
+        (root as HTMLElement).blur();
+        (root as HTMLElement).focus();
+        return true;
+      }
+      return singleLine && submit(root);
+    }
     if (!singleLine) return false;
     if (dir === 'up' || dir === 'down') return ctx.moveFocus(dir);
     if (dir === 'left' || dir === 'right') {

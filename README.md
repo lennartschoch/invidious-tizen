@@ -11,7 +11,7 @@ A [TizenBrew](https://github.com/reisxd/TizenBrew) module for **Tizen 5.5+** (20
 ![TizenBrew](https://img.shields.io/badge/TizenBrew-module-8A2BE2)
 ![Tizen](https://img.shields.io/badge/Tizen-5.5%2B-1428A0)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
-![tests](https://img.shields.io/badge/tests-56%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-58%20passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 <br>
@@ -50,7 +50,7 @@ Mirrors YouTube TV wherever the buttons exist there.
 | Remote key | Action |
 |---|---|
 | **D-pad** | Move focus between links/buttons/inputs |
-| **OK** | Activate the focused item; submit the search when in the search box; on a watch page, enter fullscreen and play; in fullscreen, play/pause |
+| **OK** | Activate the focused item; in a text field, start typing (OK again submits the search); on a watch page, enter fullscreen and play; in fullscreen, play/pause |
 | **Back** | In the player: hide the bar, then exit fullscreen; otherwise step back toward TizenBrew → exit at the start |
 | **Play/Pause**, Play, Pause | Play or pause |
 | **Stop** | Pause |
@@ -211,6 +211,7 @@ so OK/Back still behave like the TV.
 ## ⚠️ Notes
 
 - `inv.nadeko.net` runs a **"Go-away" CAPTCHA**, so it may challenge the webview before it works — pick another instance if it does.
+- The instance is pinned to Invidious' **light** theme: the TV's browser force-darkens pages, so Invidious' dark theme renders near-black while its light theme renders as a normal dark.
 - The userscript's key registration path (`tizen.tvinputdevice`) is the one piece that can only be fully exercised on the TV.
 - To target a single instance instead of the picker, set `websiteURL` to it (and update `PICKER_URL` if you fork the picker).
 

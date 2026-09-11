@@ -63,10 +63,44 @@
   };
 
   // src/userscript/components/input.ts
+  var PENDING = "data-itv-edit-pending";
   var isTextInput = (el) => {
     if (!el) return false;
     const tag = (el.tagName || "").toLowerCase();
     return tag === "input" || tag === "textarea" || el.isContentEditable === true;
+  };
+  var editable = (el) => el.tagName === "INPUT" || el.tagName === "TEXTAREA";
+  var setReadOnly = (el, value) => {
+    if (editable(el)) el.readOnly = value;
+  };
+  var justActivated = null;
+  var installInputDeferral = () => {
+    document.addEventListener(
+      "focusin",
+      (e) => {
+        const el = e.target;
+        if (!(el instanceof Element) || !editable(el)) return;
+        if (justActivated === el) {
+          justActivated = null;
+          return;
+        }
+        if (!el.hasAttribute(PENDING)) {
+          setReadOnly(el, true);
+          el.setAttribute(PENDING, "1");
+        }
+      },
+      true
+    );
+    document.addEventListener(
+      "focusout",
+      (e) => {
+        const el = e.target;
+        if (!(el instanceof Element) || !el.hasAttribute(PENDING)) return;
+        el.removeAttribute(PENDING);
+        setReadOnly(el, false);
+      },
+      true
+    );
   };
   var submit = (el) => {
     const input2 = el;
@@ -96,7 +130,17 @@
     selector: "input, textarea, [contenteditable]",
     key: (root, code, dir, ctx) => {
       const singleLine = root.tagName === "INPUT";
-      if (code === KEYS.ENTER) return singleLine && submit(root);
+      if (code === KEYS.ENTER) {
+        if (root.hasAttribute(PENDING)) {
+          root.removeAttribute(PENDING);
+          setReadOnly(root, false);
+          justActivated = root;
+          root.blur();
+          root.focus();
+          return true;
+        }
+        return singleLine && submit(root);
+      }
       if (!singleLine) return false;
       if (dir === "up" || dir === "down") return ctx.moveFocus(dir);
       if (dir === "left" || dir === "right") {
@@ -911,18 +955,17 @@
 
   // src/userscript/styles.ts
   var STYLES = [
-    ":focus{outline:3px solid #fff !important;outline-offset:2px;}",
-    // Invidious puts the theme class on <body>; ring white on dark, near-black on
-    // light so it stays visible either way. The picker is dark and unclassed.
-    ".light-theme :focus{outline-color:#111 !important;}",
+    // Two-tone ring: the dark backing keeps it visible on light backgrounds, the
+    // white line on dark ones. Needed because forced light + a force-darkening
+    // engine can disagree about which theme is actually painted.
+    ":focus{outline:3px solid #fff !important;outline-offset:3px;box-shadow:0 0 0 3px #111 !important;}",
     // Invidious video thumbnails (and channel-card avatars) are inline links whose
     // only content is a block <img>/<center>. An inline box with no line box paints
     // no outline, so the ring above silently disappears; make the link a block
     // while focused. Keep `.h-box > a` narrow so text links are unaffected.
     ".thumbnail a:focus{display:block;}",
     ".h-box > a:focus{display:block;}",
-    ".video-js:focus{outline:3px solid #fff !important;outline-offset:0;}",
-    ".light-theme .video-js:focus{outline-color:#111 !important;}",
+    ".video-js:focus{outline:3px solid #fff !important;outline-offset:0;box-shadow:0 0 0 3px #111 !important;}",
     ".itv-hint{position:fixed;left:0;right:0;bottom:0;z-index:2147483647;",
     "background:rgba(0,0,0,.82);color:#fff;font:600 18px/1.4 sans-serif;",
     "padding:10px 16px;text-align:center;pointer-events:none;opacity:0;",
@@ -936,11 +979,22 @@
     (document.head || document.documentElement).appendChild(style);
   };
 
+  // src/userscript/theme.ts
+  var forceLightTheme = () => {
+    const body = document.body;
+    if (!body) return;
+    body.classList.remove("dark-theme", "no-theme");
+    body.classList.add("light-theme");
+  };
+
   // src/userscript/index.ts
   var init = () => {
     if (document.getElementById("itv-style")) return;
     injectStyles();
+    forceLightTheme();
+    document.addEventListener("DOMContentLoaded", forceLightTheme, false);
     prepareComponents();
+    installInputDeferral();
     installKeyHandler();
     installFocusScrolling();
     installFullscreenExitFocus();
@@ -950,7 +1004,7 @@
     schedulePreferencesSection();
     log(`v${VERSION} active on ${location.pathname}`);
   };
-  if (!window.__invidiousTizen) {
+  if (!window.__invidiousTizen && !location.pathname.startsWith("/tizenbrew-ui/")) {
     window.__invidiousTizen = true;
     if (document.documentElement) init();
     else document.addEventListener("DOMContentLoaded", init, false);

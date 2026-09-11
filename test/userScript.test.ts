@@ -248,7 +248,21 @@ describe('injection', () => {
     const css = win.document.getElementById('itv-style').textContent;
     expect(css).toContain('.thumbnail a:focus{display:block;}');
     expect(css).toContain('.h-box > a:focus{display:block;}');
-    expect(css).toContain('.light-theme :focus{outline-color:#111 !important;}');
+    expect(css).toContain('box-shadow:0 0 0 3px #111 !important');
+  });
+
+  it('does not run on the TizenBrew UI', () => {
+    const win = setup(NAV_HTML, 'https://tizenbrew.test/tizenbrew-ui/dist/index.html');
+    expect(win.document.getElementById('itv-style')).toBeNull();
+    expect(win.__invidiousTizen).toBeUndefined();
+  });
+
+  it('forces the light theme on load', () => {
+    const win = setup('<div></div>');
+    win.document.body.classList.add('dark-theme');
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded', { bubbles: true }));
+    expect(win.document.body.classList.contains('light-theme')).toBe(true);
+    expect(win.document.body.classList.contains('dark-theme')).toBe(false);
   });
 
   it('adds the Invidious Tizen section on /preferences', () => {
@@ -326,15 +340,20 @@ describe('D-pad navigation', () => {
     expect(activeId(win)).toBe('logo');
   });
 
-  it('submits the search form on OK while the input is focused', () => {
+  it('OK starts editing a focused input, then submits', () => {
     const win = setup(SEARCH_HTML);
-    win.document.getElementById('q').focus();
+    const input = win.document.getElementById('q') as HTMLInputElement;
+    input.focus();
+    expect(input.readOnly).toBe(true); // highlighted, keyboard deferred
     let submitted = false;
     win.document.getElementById('go').addEventListener('click', (e: Event) => {
       e.preventDefault();
       submitted = true;
     });
-    press(win, 13); // OK
+    press(win, 13); // OK -> start editing, no submit yet
+    expect(submitted).toBe(false);
+    expect(input.readOnly).toBe(false);
+    press(win, 13); // OK -> submit
     expect(submitted).toBe(true);
   });
 
