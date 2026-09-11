@@ -118,6 +118,51 @@ const BIGPLAY_HTML = `
     <button class="vjs-big-play-button" id="big" data-box="0,0,80,80">play</button>
   </div>`;
 
+const INPUT_NAV_HTML = `
+  <a id="logo" href="/" data-box="0,0,60,20">logo</a>
+  <input id="search" data-box="80,0,200,20">
+  <a id="login" href="/login" data-box="300,0,60,20">login</a>`;
+
+// A comment row (`.comments .pure-g` with a direct `.channel-profile`) plus a
+// link that sits just below it, to prove the inner links are collapsed away.
+const COMMENT_HTML = `
+  <div class="comments">
+    <div class="pure-g" id="comment" data-box="0,0,340,80">
+      <div class="channel-profile" data-box="0,0,40,40"><img data-box="0,0,40,40"></div>
+      <div class="pure-u-20-24" data-box="40,0,300,60">
+        <a id="author" href="/channel/UC1" data-box="40,0,120,20">author</a>
+        <a id="reply" href="javascript:void(0)" data-box="40,30,60,20">reply</a>
+      </div>
+    </div>
+  </div>
+  <a id="next" href="/feed/trending" data-box="0,120,100,20">next</a>`;
+
+// A related-videos rail (several `.thumbnail a`) and a link just below the
+// first tile that is closer by geometry but outside the rail.
+const RAIL_HTML = `
+  <a id="over" href="https://example.com" data-box="400,90,500,40">outside</a>
+  <div class="rail" data-box="500,0,300,600">
+    <div class="h-box"><div class="thumbnail"><a id="s1" href="/watch?v=1" tabindex="-1" data-box="500,0,300,160"><img data-box="500,0,300,160"></a></div></div>
+    <div class="h-box"><div class="thumbnail"><a id="s2" href="/watch?v=2" tabindex="-1" data-box="500,200,300,160"><img data-box="500,200,300,160"></a></div></div>
+    <div class="h-box"><div class="thumbnail"><a id="s3" href="/watch?v=3" tabindex="-1" data-box="500,400,300,160"><img data-box="500,400,300,160"></a></div></div>
+  </div>`;
+
+// A first row of two tiles with a header tab up-and-to-the-right of the second.
+const GRID_HTML = `
+  <a id="tab" href="/feed/popular" data-box="300,0,120,20">Popular</a>
+  <div class="grid" data-box="0,40,400,400">
+    <div class="h-box"><div class="thumbnail"><a id="g1" href="/watch?v=1" tabindex="-1" data-box="0,40,180,120"><img data-box="0,40,180,120"></a></div></div>
+    <div class="h-box"><div class="thumbnail"><a id="g2" href="/watch?v=2" tabindex="-1" data-box="200,40,180,120"><img data-box="200,40,180,120"></a></div></div>
+    <div class="h-box"><div class="thumbnail"><a id="g3" href="/watch?v=3" tabindex="-1" data-box="0,200,180,120"><img data-box="0,200,180,120"></a></div></div>
+    <div class="h-box"><div class="thumbnail"><a id="g4" href="/watch?v=4" tabindex="-1" data-box="200,200,180,120"><img data-box="200,200,180,120"></a></div></div>
+  </div>`;
+
+const PLAYER_CONTROLS_HTML = `
+  <div class="video-js" id="vjs" data-box="0,0,640,360" tabindex="0">
+    <button class="vjs-play-control" id="ctrl" data-box="0,330,40,30">play</button>
+  </div>
+  <a id="below" href="/x" data-box="0,400,640,40">below</a>`;
+
 const PREFS_HTML = `
   <div class="h-box">
     <form class="pure-form pure-form-aligned" action="/preferences?referer=%2F">
@@ -181,7 +226,7 @@ describe('D-pad navigation', () => {
     expect(activeId(win)).toBe('r2');
   });
 
-  it('lets Up/Down leave a single-line input but keeps Left/Right for the caret', () => {
+  it('lets Up/Down leave a single-line input and keeps typing out of the player', () => {
     const win = setup(INPUT_HTML);
     const { calls } = playerStub(win);
     const search = win.document.getElementById('search');
@@ -189,10 +234,76 @@ describe('D-pad navigation', () => {
     press(win, 53); // '5' while typing must not reach the player
     expect(calls).toEqual([]);
     expect(activeId(win)).toBe('search');
-    press(win, 39); // Left/Right stay in the input for the caret
-    expect(activeId(win)).toBe('search');
     press(win, 40); // Down leaves the input (Invidious autofocuses it)
     expect(activeId(win)).toBe('r1');
+  });
+
+  it('leaves a single-line input at the caret edge, keeps the caret otherwise', () => {
+    const win = setup(INPUT_NAV_HTML);
+    const input = win.document.getElementById('search');
+    input.focus();
+    press(win, 37); // empty -> Left leaves to the logo
+    expect(activeId(win)).toBe('logo');
+
+    input.focus();
+    press(win, 39); // empty -> Right leaves to login
+    expect(activeId(win)).toBe('login');
+
+    input.focus();
+    input.value = 'abc';
+    input.setSelectionRange(1, 1);
+    press(win, 37); // caret mid-text -> stays in the input
+    expect(activeId(win)).toBe('search');
+
+    input.setSelectionRange(0, 0);
+    press(win, 37); // caret at the start -> leaves
+    expect(activeId(win)).toBe('logo');
+  });
+
+  it('collapses a comment to one stop and opens its author on OK', () => {
+    const win = setup(COMMENT_HTML);
+    press(win, 40); // body -> comment container
+    const comment = win.document.getElementById('comment');
+    expect(win.document.activeElement).toBe(comment);
+    press(win, 40); // inner links skipped -> next
+    expect(activeId(win)).toBe('next');
+
+    let opened = false;
+    win.document.getElementById('author').addEventListener('click', (e: Event) => {
+      e.preventDefault();
+      opened = true;
+    });
+    comment.focus();
+    press(win, 13); // OK opens the author
+    expect(opened).toBe(true);
+  });
+
+  it('keeps Up/Down inside the related-videos rail', () => {
+    const win = setup(RAIL_HTML);
+    win.document.getElementById('s1').focus();
+    press(win, 40); // nearest by geometry is the outside link, but the rail wins
+    expect(activeId(win)).toBe('s2');
+    press(win, 40);
+    expect(activeId(win)).toBe('s3');
+    press(win, 38);
+    expect(activeId(win)).toBe('s2');
+  });
+
+  it('does not jump to a header tab at the end of a row', () => {
+    const win = setup(GRID_HTML);
+    win.document.getElementById('g2').focus();
+    press(win, 39); // Right: the tab is up-and-right, so stay in the row
+    expect(activeId(win)).toBe('g2');
+    press(win, 40); // Down stays in the grid
+    expect(activeId(win)).toBe('g4');
+  });
+
+  it('treats the player as one stop, not its control bar', () => {
+    const win = setup(PLAYER_CONTROLS_HTML);
+    press(win, 40); // body -> player root
+    expect(activeId(win)).toBe('vjs');
+    press(win, 40); // leaves the player, skipping the control button
+    expect(activeId(win)).toBe('below');
   });
 
   it('focuses video thumbnails that Invidious marks tabindex="-1"', () => {

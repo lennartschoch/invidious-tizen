@@ -11,7 +11,7 @@ A [TizenBrew](https://github.com/reisxd/TizenBrew) module for **Tizen 5.5+** (20
 ![TizenBrew](https://img.shields.io/badge/TizenBrew-module-8A2BE2)
 ![Tizen](https://img.shields.io/badge/Tizen-5.5%2B-1428A0)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
-![tests](https://img.shields.io/badge/tests-39%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-44%20passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 <br>
@@ -63,8 +63,8 @@ Mirrors YouTube TV wherever the buttons exist there.
 `←/→` seek, and `↑`/`↓` step out to the content above/below (so the header,
 description, comments and sidebar stay reachable; in fullscreen both reveal the
 controls since there is nowhere to go). Volume stays on the TV's own keys, as on
-YouTube TV. The player is a focus stop: **OK** — including the video's play
-overlay — enters fullscreen and starts playback (and toggles play/pause while
+YouTube TV. The whole player is one focus stop — its control bar is not a stop —
+and **OK** enters fullscreen and starts playback (and toggles play/pause while
 fullscreen). Leaving fullscreen with **Back** returns focus to the page so you can
 keep browsing.
 
@@ -133,12 +133,26 @@ src/
 └── userscript/
     ├── index.ts             # entry: guard + init
     ├── constants.ts         # key codes, PICKER_URL, version
-    ├── keys.ts              # keydown → actions
+    ├── keys.ts              # global keydown → actions (dispatcher)
     ├── media.ts             # player/<video> adapter + playback actions
-    ├── navigation.ts        # geometric D-pad focus movement
+    ├── navigation/
+    │   ├── geometry.ts      # scoring + cross-axis overlap
+    │   ├── focus.ts         # D-pad stop set (FocusRule / ScopeRule pipeline)
+    │   └── index.ts         # moveFocus + focus/scroll installers
+    ├── components/          # one module per Invidious component
+    │   ├── tile.ts          # video tile → single stop (thumbnail)
+    │   ├── comment.ts       # comment → single stop; OK opens the author
+    │   ├── player.ts        # whole player is one stop (no control bar)
+    │   ├── rail.ts          # listing/rail scopes Up/Down
+    │   ├── input.ts         # text-input arrow rules
+    │   └── index.ts         # aggregates the active component rules
     ├── preferences.ts       # the /preferences section
     ├── hint.ts, styles.ts, log.ts
 ```
+
+Components self-gate on their own markup, so a rule only affects pages that
+contain it. Add a component by dropping a module in `components/` and listing it
+in `components/index.ts`; screen-specific overrides can be layered on top later.
 
 `esbuild` targets `chrome69`, so newer syntax is down-levelled for Tizen 5.5.
 `dist/userScript.js` and `dist/index.html` are build output but are **committed**

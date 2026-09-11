@@ -1,3 +1,5 @@
+import { commentAuthor } from './components/comment';
+import { inputArrowAllowed, isTextInput } from './components/input';
 import { ARROW, KEYS } from './constants';
 import {
   enterFullscreen,
@@ -15,12 +17,6 @@ import {
 } from './media';
 import { moveFocus, moveFocusOutside } from './navigation';
 
-const isTextInput = (el: Element | null): boolean => {
-  if (!el) return false;
-  const tag = (el.tagName || '').toLowerCase();
-  return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable === true;
-};
-
 const isActivatable = (el: Element | null): boolean => {
   if (!el) return false;
   const tag = el.tagName.toLowerCase();
@@ -37,9 +33,16 @@ const isActivatable = (el: Element | null): boolean => {
 /** YouTube TV-style: OK selects a video, so on a watch page it focuses the
  *  player and enters fullscreen playback; in fullscreen it toggles play/pause.
  *  A real player control (big play button, control bar) is left to the browser,
- *  except the play overlay which also goes fullscreen. */
+ *  except the play overlay which also goes fullscreen. A focused comment opens
+ *  its author. */
 const onEnter = (): boolean => {
   const active = document.activeElement;
+  // A comment is a single focus stop: OK opens its author's channel.
+  const author = commentAuthor(active);
+  if (author) {
+    author.click();
+    return true;
+  }
   if (active && active.closest && active.closest('.vjs-big-play-button')) {
     enterFullscreen();
     play();
@@ -79,13 +82,11 @@ const onKeyDown = (e: KeyboardEvent): void => {
 
   const code = e.keyCode;
   const dir = ARROW[code];
-  // While typing, leave the TV keyboard alone — except Back, and Up/Down on a
-  // single-line input, which Invidious autofocuses on the home/search pages and
-  // would otherwise trap the D-pad there. Left/Right stay for the caret.
+  // While typing, leave the TV keyboard alone — except Back, and the arrows the
+  // input component lets through (Up/Down always, Left/Right at the caret edge).
   const active = document.activeElement;
-  if (isTextInput(active) && code !== KEYS.BACK) {
-    const singleLine = !!active && active.tagName === 'INPUT';
-    if (!(singleLine && (dir === 'up' || dir === 'down'))) return;
+  if (isTextInput(active) && code !== KEYS.BACK && !inputArrowAllowed(active as Element, dir)) {
+    return;
   }
 
   let handled: boolean;

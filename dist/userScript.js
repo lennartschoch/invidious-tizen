@@ -24,6 +24,61 @@
   var VERSION = "0.1.3";
   var PICKER_URL = "https://lennartschoch.github.io/invidious-tizen/dist/index.html";
 
+  // src/userscript/components/comment.ts
+  var tagComments = () => {
+    const rows = document.querySelectorAll(".comments .pure-g");
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.getAttribute("data-itv-comment") === "1") continue;
+      const kids = row.children;
+      let isComment = false;
+      for (let j = 0; j < kids.length; j++) {
+        if (kids[j].classList.contains("channel-profile")) {
+          isComment = true;
+          break;
+        }
+      }
+      if (!isComment) continue;
+      row.setAttribute("data-itv-comment", "1");
+      row.setAttribute("tabindex", "0");
+    }
+  };
+  var commentRule = {
+    prepare: tagComments,
+    skip: (el) => {
+      const comment = el.closest("[data-itv-comment]");
+      return !!comment && comment !== el;
+    }
+  };
+  var commentAuthor = (el) => {
+    const comment = el && el.closest ? el.closest("[data-itv-comment]") : null;
+    if (!comment) return null;
+    return comment.querySelector(
+      'a[href^="/channel/"], a[href^="/c/"], a[href^="/user/"]'
+    );
+  };
+
+  // src/userscript/components/input.ts
+  var isTextInput = (el) => {
+    if (!el) return false;
+    const tag = (el.tagName || "").toLowerCase();
+    return tag === "input" || tag === "textarea" || el.isContentEditable === true;
+  };
+  var inputArrowAllowed = (el, dir) => {
+    if (el.tagName !== "INPUT") return false;
+    if (dir === "up" || dir === "down") return true;
+    if (dir !== "left" && dir !== "right") return false;
+    const input = el;
+    try {
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      const len = (input.value || "").length;
+      return dir === "left" ? start === 0 && end === 0 : start === len && end === len;
+    } catch {
+      return false;
+    }
+  };
+
   // src/userscript/hint.ts
   var hintEl = null;
   var hintTimer;
@@ -188,38 +243,76 @@
     return true;
   };
 
-  // src/userscript/navigation.ts
-  var FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex],[role="button"]';
-  var INTERACTIVE = 'a[href],button,input,select,textarea,[role="button"]';
+  // src/userscript/components/player.ts
+  var playerRule = {
+    skip: (el) => {
+      const player2 = el.closest(".video-js");
+      return !!player2 && player2 !== el;
+    }
+  };
+
+  // src/userscript/components/rail.ts
+  var railScope = {
+    scope: (el) => {
+      let node = el.parentElement;
+      while (node && node !== document.body) {
+        if (node.querySelectorAll(".thumbnail a").length >= 2) return node;
+        node = node.parentElement;
+      }
+      return null;
+    }
+  };
+
+  // src/userscript/components/tile.ts
   var isSecondaryLink = (el) => {
     if (el.tagName !== "A") return false;
-    const tile = el.closest(".h-box");
-    if (!tile) return false;
-    const thumb = tile.querySelector(".thumbnail a[href]");
-    return !!thumb && el !== thumb;
+    let tile = el.parentElement;
+    while (tile && tile !== document.body) {
+      const thumbs = tile.querySelectorAll(".thumbnail a[href]");
+      if (thumbs.length === 1) return thumbs[0] !== el;
+      if (thumbs.length > 1) return false;
+      tile = tile.parentElement;
+    }
+    return false;
   };
+  var tileRule = { skip: isSecondaryLink };
+
+  // src/userscript/components/index.ts
+  var focusRules = [playerRule, commentRule, tileRule];
+  var scopeRules = [railScope];
+
+  // src/userscript/navigation/focus.ts
+  var FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex],[role="button"]';
+  var INTERACTIVE = 'a[href],button,input,select,textarea,[role="button"]';
   var isVisible = (el) => {
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return false;
     const style = window.getComputedStyle(el);
     return !style || style.visibility !== "hidden" && style.display !== "none" && style.opacity !== "0";
   };
-  var focusables = () => {
+  var focusables = (rules) => {
+    var _a, _b, _c, _d;
+    for (let r = 0; r < rules.length; r++) (_b = (_a = rules[r]).prepare) == null ? void 0 : _b.call(_a);
     const found = document.querySelectorAll(FOCUSABLE);
     const out = [];
     for (let i = 0; i < found.length; i++) {
       const el = found[i];
       if (el.disabled) continue;
       if (el.getAttribute("tabindex") === "-1" && !el.matches(INTERACTIVE)) continue;
-      if (isSecondaryLink(el)) continue;
+      let skip = false;
+      for (let r = 0; r < rules.length; r++) {
+        if ((_d = (_c = rules[r]).skip) == null ? void 0 : _d.call(_c, el)) {
+          skip = true;
+          break;
+        }
+      }
+      if (skip) continue;
       if (isVisible(el)) out.push(el);
     }
     return out;
   };
-  var centerOf = (el) => {
-    const r = el.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  };
+
+  // src/userscript/navigation/geometry.ts
   var score = (from, to, dir) => {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
@@ -229,11 +322,21 @@
     if (dir === "up") return dy >= -EPS ? null : from.y - to.y + Math.abs(dx) * 2;
     return dy <= EPS ? null : to.y - from.y + Math.abs(dx) * 2;
   };
-  var nearest = (origin, els, dir) => {
+  var crosses = (from, to, dir) => {
+    if (dir === "left" || dir === "right") {
+      return Math.min(from.bottom, to.bottom) > Math.max(from.top, to.top);
+    }
+    return Math.min(from.right, to.right) > Math.max(from.left, to.left);
+  };
+  var nearest = (from, exclude, els, dir) => {
+    const origin = { x: from.left + from.width / 2, y: from.top + from.height / 2 };
     let best = null;
     let bestScore = Infinity;
     for (const el of els) {
-      const s = score(origin, centerOf(el), dir);
+      if (el === exclude) continue;
+      const rect = el.getBoundingClientRect();
+      if (!crosses(from, rect, dir)) continue;
+      const s = score(origin, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, dir);
       if (s !== null && s < bestScore) {
         bestScore = s;
         best = el;
@@ -241,8 +344,17 @@
     }
     return best;
   };
+
+  // src/userscript/navigation/index.ts
+  var resolveScope = (el) => {
+    for (let i = 0; i < scopeRules.length; i++) {
+      const scope = scopeRules[i].scope(el);
+      if (scope) return scope;
+    }
+    return null;
+  };
   var moveFocus = (dir) => {
-    const els = focusables();
+    const els = focusables(focusRules);
     if (!els.length) return false;
     const active = document.activeElement;
     const current = active && active !== document.body && active !== document.documentElement ? active : null;
@@ -250,18 +362,30 @@
       els[0].focus();
       return true;
     }
-    const best = nearest(
-      centerOf(current),
-      els.filter((el) => el !== current),
-      dir
-    );
+    const pool = els.filter((el) => el !== current);
+    if (dir === "up" || dir === "down") {
+      const scope = resolveScope(current);
+      if (scope) {
+        const bestInScope = nearest(
+          current.getBoundingClientRect(),
+          current,
+          pool.filter((el) => scope.contains(el)),
+          dir
+        );
+        if (bestInScope) {
+          bestInScope.focus();
+          return true;
+        }
+      }
+    }
+    const best = nearest(current.getBoundingClientRect(), current, pool, dir);
     if (!best) return false;
     best.focus();
     return true;
   };
   var moveFocusOutside = (container, dir) => {
-    const els = focusables().filter((el) => !container.contains(el));
-    const best = nearest(centerOf(container), els, dir);
+    const els = focusables(focusRules).filter((el) => !container.contains(el));
+    const best = nearest(container.getBoundingClientRect(), null, els, dir);
     if (!best) return false;
     best.focus();
     return true;
@@ -294,11 +418,6 @@
   };
 
   // src/userscript/keys.ts
-  var isTextInput = (el) => {
-    if (!el) return false;
-    const tag = (el.tagName || "").toLowerCase();
-    return tag === "input" || tag === "textarea" || el.isContentEditable === true;
-  };
   var isActivatable = (el) => {
     if (!el) return false;
     const tag = el.tagName.toLowerCase();
@@ -306,6 +425,11 @@
   };
   var onEnter = () => {
     const active = document.activeElement;
+    const author = commentAuthor(active);
+    if (author) {
+      author.click();
+      return true;
+    }
     if (active && active.closest && active.closest(".vjs-big-play-button")) {
       enterFullscreen();
       play();
@@ -339,9 +463,8 @@
     const code = e.keyCode;
     const dir = ARROW[code];
     const active = document.activeElement;
-    if (isTextInput(active) && code !== KEYS.BACK) {
-      const singleLine = !!active && active.tagName === "INPUT";
-      if (!(singleLine && (dir === "up" || dir === "down"))) return;
+    if (isTextInput(active) && code !== KEYS.BACK && !inputArrowAllowed(active, dir)) {
+      return;
     }
     let handled;
     if (dir) {

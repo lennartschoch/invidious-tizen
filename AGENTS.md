@@ -61,9 +61,13 @@ oxlint is the linter; adding ESLint back means dropping TS 7.
 | Player `tabindex` must be forced to 0 | video.js unconditionally sets `tabindex="-1"` on `.video-js` (and the inner `<video>`) to keep it out of the browser tab order. `ensurePlayerFocusable` promotes it to 0 so the D-pad can land on the player; "only set when absent" silently leaves it unreachable. |
 | OK enters fullscreen from the watch page | `onEnter` enters fullscreen (`video.js` `requestFullscreen`, else the Fullscreen API) and plays, on the player and on the `.vjs-big-play-button` overlay; in fullscreen it toggles play/pause. Other player controls (control bar) are left to the browser. Do not go back to swallowing OK. |
 | Leaving fullscreen returns focus to the page | `installFullscreenExitFocus` moves focus out of `.video-js` on `fullscreenchange` (`moveFocusOutside` down), so after Back the D-pad browses the page instead of seeking the video. |
-| Text-input guard | While focus is in an input/textarea/`contenteditable`, only Back is handled, so the TV keyboard works. Exception: on a single-line `<input>` (Invidious autofocuses the search box, which would trap the D-pad) `↑`/`↓` move focus out while `←`/`→` stay for the caret. Intercepting Left/Right (or any arrow in a textarea) breaks typing. |
+| Text-input guard | While focus is in an input/textarea/`contenteditable`, only Back is handled, so the TV keyboard works. Exception: on a single-line `<input>` (Invidious autofocuses the search box, which would trap the D-pad) `↑`/`↓` always leave, and `←`/`→` leave once the caret is at that edge — so the logo beside the search box is reachable without breaking editing. Never intercept Left/Right mid-text or any arrow in a textarea. |
 | `tabindex="-1"` is not a skip signal for interactive nodes | Invidious marks video thumbnails and some channel links `tabindex="-1"` to keep them out of the browser tab order. `navigation.ts` keeps them by only skipping `tabindex="-1"` on non-interactive nodes (`INTERACTIVE`). A blanket skip makes thumbnails unreachable; the e2e asserts reachability. |
-| One focus stop per video tile | On listings, a video is a `.h-box` containing a `.thumbnail a` plus title/channel/icon links. `navigation.ts` skips every anchor in that box except the thumbnail, so the D-pad moves tile to tile. Coupled to Invidious markup: if the box stops being found, extra stops return (thumbnails stay reachable); update the selectors. |
+| One focus stop per video tile | A tile is the nearest ancestor holding **exactly one** `.thumbnail a`; `navigation.ts` skips the tile's title/channel/icon links so the D-pad moves tile to tile. Do not key this off `.h-box`: the related-videos rail is a single `.h-box` with many tiles, so that would collapse the whole rail to one stop. |
+| Cross-axis overlap is required | `nearest` rejects candidates that do not genuinely overlap the current element on the cross axis. Without it, `→` at the end of a feed row picks the Popular/Trending tab that merely touches the row (and `↓` can hop columns). A candidate may only move the other axis first. |
+| Player is one stop | `focusables` skips everything inside `.video-js` except the root, so the control bar and big play button are not D-pad stops; the whole player is the single stop, and OK enters fullscreen/plays (`keys.ts`). |
+| Comments are one stop | Each `.comments .pure-g` with a direct `.channel-profile` gets `tabindex=0` + `data-itv-comment`; its inner links are skipped and OK opens the author's channel (`keys.ts`). Coupled to Invidious markup. |
+| Related-videos rail scopes Up/Down | When focus is on a thumbnail, `moveFocus` restricts `↑`/`↓` to the nearest ancestor with ≥2 thumbnails, so the rail walks item-to-item instead of jumping into the middle column. Falls back to global movement at the ends. |
 | Focused thumbnail needs `display:block` | The thumbnail is an inline `<a>` whose only content is a block `<img>`, so a `:focus` outline on it paints nothing (no line box). `styles.ts` sets `.thumbnail a:focus{display:block}` so the ring actually shows. The ring is white, switched to `#111` under `.light-theme`. Remove either and the D-pad works but the user sees no/washed-out highlight. |
 | Number keys → percentage | YouTube TV parity: `0–9` jump to 0–90%. Up/Down/OK reveal the player controls; volume stays on the TV's own keys. |
 | Back precedence | fullscreen → `history.back()` whenever there is history (including at `/`) → Tizen exit only with no history. The old `pathname !== '/'` guard exited the app on Invidious' root; do not reintroduce it. |
@@ -102,6 +106,15 @@ appearing, suspect a markup change there, not this repo.
 - `src/userscript/` is small, single-purpose modules in arrow-function style
   with early returns; keep new code that shape and keep the `media` adapter as
   the only place that branches on `window.player` vs `<video>`.
+- Navigation is split: `navigation/geometry.ts` (scoring/overlap),
+  `navigation/focus.ts` (the `FocusRule`/`ScopeRule` stop-set pipeline),
+  `navigation/index.ts` (`moveFocus` + installers). Per-Invidious-component
+  behavior lives in `components/<name>.ts` as a `FocusRule` (collapse/skip),
+  `ScopeRule` (vertical scope), or a small helper (`commentAuthor`,
+  `inputArrowAllowed`), aggregated in `components/index.ts`. Prefer adding a
+  component module over new branches in `keys.ts`; components self-gate on their
+  markup so they apply on every page they appear. A path-based screen layer can
+  compose/disable components later.
 - Prefer positive phrasing in comments and docs; keep them explaining *why*.
 - `inv.nadeko.net` runs a Go-away CAPTCHA — expect it to challenge the webview;
   it is not a bug in the module.
