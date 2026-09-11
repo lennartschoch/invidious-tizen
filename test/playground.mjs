@@ -297,18 +297,31 @@ const server = http.createServer((req, res) => {
     req.on('end', async () => {
       try {
         const { type, vk, key, code, text } = JSON.parse(body);
-        const params = {
-          type,
-          windowsVirtualKeyCode: vk,
-          nativeVirtualKeyCode: vk,
-          key,
-          code,
-        };
-        if (text) {
-          params.text = text;
-          params.unmodifiedText = text;
+        if (type === 'keyDown' && key === 'Enter') {
+          // Enter's default action (form submit / button click) needs a real
+          // keypress, which a bare keyDown does not generate.
+          await send('Input.dispatchKeyEvent', {
+            type: 'rawKeyDown',
+            windowsVirtualKeyCode: vk,
+            nativeVirtualKeyCode: vk,
+            key,
+            code,
+          });
+          await send('Input.dispatchKeyEvent', { type: 'char', text: '\r', unmodifiedText: '\r' });
+        } else {
+          const params = {
+            type,
+            windowsVirtualKeyCode: vk,
+            nativeVirtualKeyCode: vk,
+            key,
+            code,
+          };
+          if (text) {
+            params.text = text;
+            params.unmodifiedText = text;
+          }
+          await send('Input.dispatchKeyEvent', params);
         }
-        await send('Input.dispatchKeyEvent', params);
       } catch { /* ignore malformed input */ }
       res.writeHead(204);
       res.end();
@@ -331,10 +344,12 @@ Click the screen once, then use the keyboard:
 Ctrl-C to quit.\n`);
 });
 
-const shutdown = async () => {
-  try { await send('Page.stopScreencast'); } catch { /* ignore */ }
-  server.close();
-  ws.close();
+// Fire-and-forget: awaiting a CDP reply here can hang SIGINT when the browser
+// is busy, so stop the screencast best-effort and exit immediately.
+const shutdown = () => {
+  try { ws.send(JSON.stringify({ id: ++seq, method: 'Page.stopScreencast' })); } catch { /* ignore */ }
+  try { server.close(); } catch { /* ignore */ }
+  try { ws.close(); } catch { /* ignore */ }
   process.exit(0);
 };
 process.on('SIGINT', shutdown);
