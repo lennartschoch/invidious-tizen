@@ -313,14 +313,15 @@
   };
 
   // src/userscript/navigation/geometry.ts
+  var CROSS = 0.5;
   var score = (from, to, dir) => {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const EPS = 4;
-    if (dir === "left") return dx >= -EPS ? null : from.x - to.x + Math.abs(dy) * 2;
-    if (dir === "right") return dx <= EPS ? null : to.x - from.x + Math.abs(dy) * 2;
-    if (dir === "up") return dy >= -EPS ? null : from.y - to.y + Math.abs(dx) * 2;
-    return dy <= EPS ? null : to.y - from.y + Math.abs(dx) * 2;
+    if (dir === "left") return dx >= -EPS ? null : from.x - to.x + Math.abs(dy) * CROSS;
+    if (dir === "right") return dx <= EPS ? null : to.x - from.x + Math.abs(dy) * CROSS;
+    if (dir === "up") return dy >= -EPS ? null : from.y - to.y + Math.abs(dx) * CROSS;
+    return dy <= EPS ? null : to.y - from.y + Math.abs(dx) * CROSS;
   };
   var crosses = (from, to, dir) => {
     if (dir === "left" || dir === "right") {

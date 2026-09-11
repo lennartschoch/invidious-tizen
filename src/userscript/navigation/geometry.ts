@@ -1,5 +1,10 @@
 import type { Direction } from '../constants';
 
+// Cross-axis misalignment penalty. Keep it gentle: overlap is already required
+// (see `crosses`), so a heavy penalty makes vertical movement prefer a lower
+// but x-aligned element over the nearer row (e.g. skipping the first result).
+const CROSS = 0.5;
+
 /** Distance score for a candidate in the pressed direction: the primary-axis
  *  gap plus a penalty for cross-axis misalignment, so aligned elements win. */
 export const score = (
@@ -10,10 +15,10 @@ export const score = (
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const EPS = 4;
-  if (dir === 'left') return dx >= -EPS ? null : from.x - to.x + Math.abs(dy) * 2;
-  if (dir === 'right') return dx <= EPS ? null : to.x - from.x + Math.abs(dy) * 2;
-  if (dir === 'up') return dy >= -EPS ? null : from.y - to.y + Math.abs(dx) * 2;
-  return dy <= EPS ? null : to.y - from.y + Math.abs(dx) * 2;
+  if (dir === 'left') return dx >= -EPS ? null : from.x - to.x + Math.abs(dy) * CROSS;
+  if (dir === 'right') return dx <= EPS ? null : to.x - from.x + Math.abs(dy) * CROSS;
+  if (dir === 'up') return dy >= -EPS ? null : from.y - to.y + Math.abs(dx) * CROSS;
+  return dy <= EPS ? null : to.y - from.y + Math.abs(dx) * CROSS;
 };
 
 /** A candidate must genuinely overlap the current element on the cross axis,
