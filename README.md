@@ -11,7 +11,7 @@ A [TizenBrew](https://github.com/reisxd/TizenBrew) module for **Tizen 5.5+** (20
 ![TizenBrew](https://img.shields.io/badge/TizenBrew-module-8A2BE2)
 ![Tizen](https://img.shields.io/badge/Tizen-5.5%2B-1428A0)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
-![tests](https://img.shields.io/badge/tests-44%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-49%20passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 <br>
@@ -50,7 +50,7 @@ Mirrors YouTube TV wherever the buttons exist there.
 | Remote key | Action |
 |---|---|
 | **D-pad** | Move focus between links/buttons/inputs |
-| **OK** | Activate the focused item; on a watch page, enter fullscreen and play; in fullscreen, play/pause |
+| **OK** | Activate the focused item; submit the search when in the search box; on a watch page, enter fullscreen and play; in fullscreen, play/pause |
 | **Back** | Leave fullscreen → step back toward TizenBrew → exit at the start |
 | **Play/Pause**, Play, Pause | Play or pause |
 | **Stop** | Pause |
@@ -64,9 +64,9 @@ Mirrors YouTube TV wherever the buttons exist there.
 description, comments and sidebar stay reachable; in fullscreen both reveal the
 controls since there is nowhere to go). Volume stays on the TV's own keys, as on
 YouTube TV. The whole player is one focus stop — its control bar is not a stop —
-and **OK** enters fullscreen and starts playback (and toggles play/pause while
-fullscreen). Leaving fullscreen with **Back** returns focus to the page so you can
-keep browsing.
+and is focused automatically on load, so **OK** enters fullscreen and starts
+playback right away (and toggles play/pause while fullscreen). Leaving fullscreen
+with **Back** returns focus to the page so you can keep browsing.
 
 ## 🧭 The Instance Picker
 
@@ -135,24 +135,34 @@ src/
     ├── constants.ts         # key codes, PICKER_URL, version
     ├── keys.ts              # global keydown → actions (dispatcher)
     ├── media.ts             # player/<video> adapter + playback actions
+    ├── registry.ts          # typed Component / Screen definitions
     ├── navigation/
     │   ├── geometry.ts      # scoring + cross-axis overlap
-    │   ├── focus.ts         # D-pad stop set (FocusRule / ScopeRule pipeline)
+    │   ├── focus.ts         # D-pad stop set over the component rules
     │   └── index.ts         # moveFocus + focus/scroll installers
     ├── components/          # one module per Invidious component
     │   ├── tile.ts          # video tile → single stop (thumbnail)
     │   ├── comment.ts       # comment → single stop; OK opens the author
     │   ├── player.ts        # whole player is one stop (no control bar)
     │   ├── rail.ts          # listing/rail scopes Up/Down
-    │   ├── input.ts         # text-input arrow rules
-    │   └── index.ts         # aggregates the active component rules
+    │   ├── input.ts         # text-input arrow rules + submit
+    │   └── index.ts         # registers the active components
+    ├── screens/             # per-screen default focus on load
+    │   ├── watch.ts         # → the player
+    │   ├── feed.ts          # → the first result
+    │   ├── search.ts        # → the first result
+    │   ├── channel.ts       # → the first result
+    │   └── index.ts         # resolve the screen + focus its default
     ├── preferences.ts       # the /preferences section
     ├── hint.ts, styles.ts, log.ts
 ```
 
-Components self-gate on their own markup, so a rule only affects pages that
-contain it. Add a component by dropping a module in `components/` and listing it
-in `components/index.ts`; screen-specific overrides can be layered on top later.
+A component is a typed `Component` (`registry.ts`): a `selector` plus optional
+`prepare`/`skip`/`scope`/`key` hooks. The runtime finds it with
+`querySelector(selector)` and checks focus with `activeElement.closest(selector)`,
+so it self-gates on markup. Add one by dropping a module in `components/` and
+listing it in `components/index.ts`; a `Screen` (`route` + `defaultFocus`) goes
+in `screens/` and `screens/index.ts` (order = match precedence).
 
 `esbuild` targets `chrome69`, so newer syntax is down-levelled for Tizen 5.5.
 `dist/userScript.js` and `dist/index.html` are build output but are **committed**

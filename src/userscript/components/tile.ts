@@ -1,21 +1,36 @@
-import type { FocusRule } from '../navigation/focus';
+import type { Component } from '../registry';
 
-/** On a listing a video is a tile made of several links to the same content:
- *  the thumbnail, the title, the channel and the little icon actions. The D-pad
- *  wants one stop per tile — the thumbnail — so drop the tile's other links.
- *  A tile is the nearest ancestor holding exactly one `.thumbnail a` (the
- *  related-videos rail is one `.h-box` holding many tiles, so `.h-box` is not
- *  narrow enough). Coupled to Invidious markup. */
+/** The primary (media) link of a card: the thumbnail for a video tile, or a
+ *  direct-child avatar link for a channel card. */
+const primaryLinks = (box: Element): Element[] => {
+  const thumbs = box.querySelectorAll('.thumbnail a[href]');
+  if (thumbs.length) return Array.from(thumbs);
+  const out: Element[] = [];
+  for (let i = 0; i < box.children.length; i++) {
+    const child = box.children[i];
+    if (child.tagName === 'A' && child.querySelector('img')) out.push(child);
+  }
+  return out;
+};
+
+/** On a listing a card holds several links to the same thing: the thumbnail (or
+ *  avatar), the title/channel name and the little icon actions. The D-pad wants
+ *  one stop per card, so keep the media link and drop the rest. A card is the
+ *  nearest ancestor holding exactly one media link (the related-videos rail is a
+ *  single `.h-box` with many tiles). Coupled to Invidious markup. */
 const isSecondaryLink = (el: Element): boolean => {
   if (el.tagName !== 'A') return false;
-  let tile: Element | null = el.parentElement;
-  while (tile && tile !== document.body) {
-    const thumbs = tile.querySelectorAll('.thumbnail a[href]');
-    if (thumbs.length === 1) return thumbs[0] !== el;
-    if (thumbs.length > 1) return false; // several tiles share this ancestor
-    tile = tile.parentElement;
+  let node: Element | null = el.parentElement;
+  while (node && node !== document.body) {
+    const primaries = primaryLinks(node);
+    if (primaries.length === 1) return primaries[0] !== el;
+    if (primaries.length > 1) return false; // several cards share this ancestor
+    node = node.parentElement;
   }
   return false;
 };
 
-export const tileRule: FocusRule = { skip: isSecondaryLink };
+export const tile: Component = {
+  selector: '.thumbnail a',
+  skip: isSecondaryLink,
+};

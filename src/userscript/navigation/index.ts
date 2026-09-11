@@ -1,12 +1,12 @@
-import { focusRules, scopeRules } from '../components';
+import { components } from '../components';
 import type { Direction } from '../constants';
 import { focusables } from './focus';
 import { nearest } from './geometry';
 
 /** The movement scope for `el` (e.g. a listing grid / related-videos rail). */
-const resolveScope = (el: Element): Element | null => {
-  for (let i = 0; i < scopeRules.length; i++) {
-    const scope = scopeRules[i].scope(el);
+const scopeFor = (el: Element): Element | null => {
+  for (let i = 0; i < components.length; i++) {
+    const scope = components[i].scope?.(el);
     if (scope) return scope;
   }
   return null;
@@ -14,7 +14,7 @@ const resolveScope = (el: Element): Element | null => {
 
 /** Move focus to the nearest focusable element in `dir`. Returns whether focus moved. */
 export const moveFocus = (dir: Direction): boolean => {
-  const els = focusables(focusRules);
+  const els = focusables(components);
   if (!els.length) return false;
 
   const active = document.activeElement;
@@ -30,7 +30,7 @@ export const moveFocus = (dir: Direction): boolean => {
   const pool = els.filter((el) => el !== current);
 
   if (dir === 'up' || dir === 'down') {
-    const scope = resolveScope(current);
+    const scope = scopeFor(current);
     if (scope) {
       const bestInScope = nearest(
         current.getBoundingClientRect(),
@@ -54,7 +54,7 @@ export const moveFocus = (dir: Direction): boolean => {
 /** Move focus out of `container` to the nearest focusable in `dir`. Lets the
  *  D-pad leave the video player for the page content around it. */
 export const moveFocusOutside = (container: Element, dir: Direction): boolean => {
-  const els = focusables(focusRules).filter((el) => !container.contains(el));
+  const els = focusables(components).filter((el) => !container.contains(el));
   const best = nearest(container.getBoundingClientRect(), null, els, dir);
   if (!best) return false;
   best.focus();

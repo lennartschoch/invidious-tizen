@@ -1,15 +1,4 @@
-/** A component's contribution to which nodes are D-pad stops. `prepare` runs
- *  before each scan (idempotent DOM setup); `skip` drops a candidate. */
-export interface FocusRule {
-  prepare?: () => void;
-  skip?: (el: Element) => boolean;
-}
-
-/** A component's vertical-movement scope: the container Up/Down should stay
- *  within when `el` is focused, or null. */
-export interface ScopeRule {
-  scope: (el: Element) => Element | null;
-}
+import type { Component } from '../registry';
 
 const FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex],[role="button"]';
 // Invidious marks video thumbnails (and some channel links) tabindex="-1" to
@@ -27,8 +16,8 @@ export const isVisible = (el: Element): boolean => {
 };
 
 /** The D-pad stops, after every component's focus rules have been applied. */
-export const focusables = (rules: FocusRule[]): HTMLElement[] => {
-  for (let r = 0; r < rules.length; r++) rules[r].prepare?.();
+export const focusables = (components: Component[]): HTMLElement[] => {
+  for (let c = 0; c < components.length; c++) components[c].prepare?.();
   const found = document.querySelectorAll(FOCUSABLE);
   const out: HTMLElement[] = [];
   for (let i = 0; i < found.length; i++) {
@@ -36,8 +25,8 @@ export const focusables = (rules: FocusRule[]): HTMLElement[] => {
     if ((el as HTMLButtonElement).disabled) continue;
     if (el.getAttribute('tabindex') === '-1' && !el.matches(INTERACTIVE)) continue;
     let skip = false;
-    for (let r = 0; r < rules.length; r++) {
-      if (rules[r].skip?.(el)) {
+    for (let c = 0; c < components.length; c++) {
+      if (components[c].skip?.(el)) {
         skip = true;
         break;
       }

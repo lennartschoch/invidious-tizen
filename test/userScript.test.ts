@@ -123,6 +123,12 @@ const INPUT_NAV_HTML = `
   <input id="search" data-box="80,0,200,20">
   <a id="login" href="/login" data-box="300,0,60,20">login</a>`;
 
+const SEARCH_HTML = `
+  <form action="/search" method="get">
+    <input id="q" name="q" data-box="0,0,200,20">
+    <button type="submit" id="go" data-box="210,0,40,20">go</button>
+  </form>`;
+
 // A comment row (`.comments .pure-g` with a direct `.channel-profile`) plus a
 // link that sits just below it, to prove the inner links are collapsed away.
 const COMMENT_HTML = `
@@ -163,6 +169,19 @@ const PLAYER_CONTROLS_HTML = `
   </div>
   <a id="below" href="/x" data-box="0,400,640,40">below</a>`;
 
+// A search grid whose first cell is a channel card: its name link is x-aligned
+// with the navbar but lower, which used to win and skip the first row.
+const SEARCH_GRID_HTML = `
+  <a id="logo" href="/" data-box="175,0,82,17">logo</a>
+  <div class="grid" data-box="0,190,1400,800">
+    <div class="h-box">
+      <a id="chan" href="/channel/UC1" tabindex="-1" data-box="175,200,365,200"><img data-box="175,200,365,200"></a>
+      <a id="chanName" href="/channel/UC1" data-box="175,420,97,18">Mike Okay</a>
+    </div>
+    <div class="h-box"><div class="thumbnail"><a id="v1" href="/watch?v=1" tabindex="-1" data-box="572,200,365,200"><img data-box="572,200,365,200"></a></div></div>
+    <div class="h-box"><div class="thumbnail"><a id="v2" href="/watch?v=2" tabindex="-1" data-box="968,200,365,200"><img data-box="968,200,365,200"></a></div></div>
+  </div>`;
+
 const PREFS_HTML = `
   <div class="h-box">
     <form class="pure-form pure-form-aligned" action="/preferences?referer=%2F">
@@ -182,6 +201,7 @@ describe('injection', () => {
     const win = setup(NAV_HTML);
     const css = win.document.getElementById('itv-style').textContent;
     expect(css).toContain('.thumbnail a:focus{display:block;}');
+    expect(css).toContain('.h-box > a:focus{display:block;}');
     expect(css).toContain('.light-theme :focus{outline-color:#111 !important;}');
   });
 
@@ -260,6 +280,18 @@ describe('D-pad navigation', () => {
     expect(activeId(win)).toBe('logo');
   });
 
+  it('submits the search form on OK while the input is focused', () => {
+    const win = setup(SEARCH_HTML);
+    win.document.getElementById('q').focus();
+    let submitted = false;
+    win.document.getElementById('go').addEventListener('click', (e: Event) => {
+      e.preventDefault();
+      submitted = true;
+    });
+    press(win, 13); // OK
+    expect(submitted).toBe(true);
+  });
+
   it('collapses a comment to one stop and opens its author on OK', () => {
     const win = setup(COMMENT_HTML);
     press(win, 40); // body -> comment container
@@ -296,6 +328,17 @@ describe('D-pad navigation', () => {
     expect(activeId(win)).toBe('g2');
     press(win, 40); // Down stays in the grid
     expect(activeId(win)).toBe('g4');
+  });
+
+  it('enters the first grid row instead of a lower x-aligned link', () => {
+    const win = setup(SEARCH_GRID_HTML);
+    win.document.getElementById('logo').focus();
+    press(win, 40); // Down -> the channel card, not the lower channel name
+    expect(activeId(win)).toBe('chan');
+    press(win, 40); // Down again -> the channel name is not a stop, so stay
+    expect(activeId(win)).toBe('chan');
+    press(win, 39); // Right -> the first video tile
+    expect(activeId(win)).toBe('v1');
   });
 
   it('treats the player as one stop, not its control bar', () => {
@@ -449,6 +492,30 @@ describe('player: YouTube TV parity', () => {
   it('promotes the video.js player from tabindex="-1" to 0', () => {
     const win = setup(`<div class="video-js" id="vjs" data-box="0,0,640,360" tabindex="-1"></div>`);
     expect(win.document.getElementById('vjs').getAttribute('tabindex')).toBe('0');
+  });
+
+  it('focuses the player by default when a watch page loads', () => {
+    const win = setup(WATCH_HTML, 'https://invidious.test/watch?v=1');
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded', { bubbles: true }));
+    expect(activeId(win)).toBe('vjs');
+  });
+
+  it('focuses the first video tile on feed, search and channel screens', () => {
+    for (const url of [
+      'https://invidious.test/feed/popular',
+      'https://invidious.test/search?q=x',
+      'https://invidious.test/channel/UC1',
+    ]) {
+      const win = setup(CARD_HTML, url);
+      win.document.dispatchEvent(new win.Event('DOMContentLoaded', { bubbles: true }));
+      expect(activeId(win)).toBe('thumb');
+    }
+  });
+
+  it('focuses the first search result even when it is a channel card', () => {
+    const win = setup(SEARCH_GRID_HTML, 'https://invidious.test/search?q=x');
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded', { bubbles: true }));
+    expect(activeId(win)).toBe('chan');
   });
 
   it('ignores colour keys (no YouTube TV equivalent, not registered)', () => {

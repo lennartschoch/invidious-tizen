@@ -25,11 +25,12 @@
   var PICKER_URL = "https://lennartschoch.github.io/invidious-tizen/dist/index.html";
 
   // src/userscript/components/comment.ts
-  var tagComments = () => {
+  var TAG = "data-itv-comment";
+  var prepare = () => {
     const rows = document.querySelectorAll(".comments .pure-g");
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      if (row.getAttribute("data-itv-comment") === "1") continue;
+      if (row.getAttribute(TAG) === "1") continue;
       const kids = row.children;
       let isComment = false;
       for (let j = 0; j < kids.length; j++) {
@@ -39,23 +40,26 @@
         }
       }
       if (!isComment) continue;
-      row.setAttribute("data-itv-comment", "1");
+      row.setAttribute(TAG, "1");
       row.setAttribute("tabindex", "0");
     }
   };
-  var commentRule = {
-    prepare: tagComments,
+  var comment = {
+    selector: `[${TAG}]`,
+    prepare,
     skip: (el) => {
-      const comment = el.closest("[data-itv-comment]");
-      return !!comment && comment !== el;
+      const root = el.closest(`[${TAG}]`);
+      return !!root && root !== el;
+    },
+    key: (root, code) => {
+      if (code !== KEYS.ENTER) return false;
+      const author = root.querySelector(
+        'a[href^="/channel/"], a[href^="/c/"], a[href^="/user/"]'
+      );
+      if (!author) return false;
+      author.click();
+      return true;
     }
-  };
-  var commentAuthor = (el) => {
-    const comment = el && el.closest ? el.closest("[data-itv-comment]") : null;
-    if (!comment) return null;
-    return comment.querySelector(
-      'a[href^="/channel/"], a[href^="/c/"], a[href^="/user/"]'
-    );
   };
 
   // src/userscript/components/input.ts
@@ -64,17 +68,40 @@
     const tag = (el.tagName || "").toLowerCase();
     return tag === "input" || tag === "textarea" || el.isContentEditable === true;
   };
-  var inputArrowAllowed = (el, dir) => {
-    if (el.tagName !== "INPUT") return false;
-    if (dir === "up" || dir === "down") return true;
-    if (dir !== "left" && dir !== "right") return false;
-    const input = el;
+  var submit = (el) => {
+    const input2 = el;
+    const form = input2.form || input2.closest("form");
+    if (!form) return false;
+    const button = form.querySelector(
+      'button:not([type]), button[type="submit"], input[type="submit"]'
+    );
+    if (button) {
+      button.click();
+      return true;
+    }
+    form.submit();
+    return true;
+  };
+  var caretAtEdge = (input2, dir) => {
     try {
-      const start = input.selectionStart;
-      const end = input.selectionEnd;
-      const len = (input.value || "").length;
+      const start = input2.selectionStart;
+      const end = input2.selectionEnd;
+      const len = (input2.value || "").length;
       return dir === "left" ? start === 0 && end === 0 : start === len && end === len;
     } catch {
+      return false;
+    }
+  };
+  var input = {
+    selector: "input, textarea, [contenteditable]",
+    key: (root, code, dir, ctx) => {
+      const singleLine = root.tagName === "INPUT";
+      if (code === KEYS.ENTER) return singleLine && submit(root);
+      if (!singleLine) return false;
+      if (dir === "up" || dir === "down") return ctx.moveFocus(dir);
+      if (dir === "left" || dir === "right") {
+        return caretAtEdge(root, dir) && ctx.moveFocus(dir);
+      }
       return false;
     }
   };
@@ -185,11 +212,6 @@
     m.revealControls();
     return true;
   };
-  var inPlayerContext = () => {
-    if (document.fullscreenElement) return true;
-    const el = document.activeElement;
-    return !!(el && el.closest && el.closest(".video-js"));
-  };
   var isFullscreen = () => {
     const p = player();
     if (p && typeof p.isFullscreen === "function") return !!p.isFullscreen();
@@ -244,15 +266,32 @@
   };
 
   // src/userscript/components/player.ts
-  var playerRule = {
+  var player2 = {
+    selector: ".video-js",
     skip: (el) => {
-      const player2 = el.closest(".video-js");
-      return !!player2 && player2 !== el;
+      const root = el.closest(".video-js");
+      return !!root && root !== el;
+    },
+    key: (root, code, dir, ctx) => {
+      if (dir) {
+        if (dir === "left") return seekBy(-10);
+        if (dir === "right") return seekBy(10);
+        const vertical = dir === "up" || dir === "down";
+        return vertical && !document.fullscreenElement && ctx.moveFocusOutside(root, dir) || revealControls();
+      }
+      if (code === KEYS.ENTER) {
+        if (document.fullscreenElement || isFullscreen()) return togglePlay();
+        enterFullscreen();
+        play();
+        return true;
+      }
+      return false;
     }
   };
 
   // src/userscript/components/rail.ts
-  var railScope = {
+  var rail = {
+    selector: ".thumbnail a",
     scope: (el) => {
       let node = el.parentElement;
       while (node && node !== document.body) {
@@ -264,22 +303,38 @@
   };
 
   // src/userscript/components/tile.ts
+  var primaryLinks = (box) => {
+    const thumbs = box.querySelectorAll(".thumbnail a[href]");
+    if (thumbs.length) return Array.from(thumbs);
+    const out = [];
+    for (let i = 0; i < box.children.length; i++) {
+      const child = box.children[i];
+      if (child.tagName === "A" && child.querySelector("img")) out.push(child);
+    }
+    return out;
+  };
   var isSecondaryLink = (el) => {
     if (el.tagName !== "A") return false;
-    let tile = el.parentElement;
-    while (tile && tile !== document.body) {
-      const thumbs = tile.querySelectorAll(".thumbnail a[href]");
-      if (thumbs.length === 1) return thumbs[0] !== el;
-      if (thumbs.length > 1) return false;
-      tile = tile.parentElement;
+    let node = el.parentElement;
+    while (node && node !== document.body) {
+      const primaries = primaryLinks(node);
+      if (primaries.length === 1) return primaries[0] !== el;
+      if (primaries.length > 1) return false;
+      node = node.parentElement;
     }
     return false;
   };
-  var tileRule = { skip: isSecondaryLink };
+  var tile = {
+    selector: ".thumbnail a",
+    skip: isSecondaryLink
+  };
 
   // src/userscript/components/index.ts
-  var focusRules = [playerRule, commentRule, tileRule];
-  var scopeRules = [railScope];
+  var components = [input, player2, comment, tile, rail];
+  var prepareComponents = () => {
+    var _a, _b;
+    for (let i = 0; i < components.length; i++) (_b = (_a = components[i]).prepare) == null ? void 0 : _b.call(_a);
+  };
 
   // src/userscript/navigation/focus.ts
   var FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex],[role="button"]';
@@ -290,9 +345,9 @@
     const style = window.getComputedStyle(el);
     return !style || style.visibility !== "hidden" && style.display !== "none" && style.opacity !== "0";
   };
-  var focusables = (rules) => {
+  var focusables = (components2) => {
     var _a, _b, _c, _d;
-    for (let r = 0; r < rules.length; r++) (_b = (_a = rules[r]).prepare) == null ? void 0 : _b.call(_a);
+    for (let c = 0; c < components2.length; c++) (_b = (_a = components2[c]).prepare) == null ? void 0 : _b.call(_a);
     const found = document.querySelectorAll(FOCUSABLE);
     const out = [];
     for (let i = 0; i < found.length; i++) {
@@ -300,8 +355,8 @@
       if (el.disabled) continue;
       if (el.getAttribute("tabindex") === "-1" && !el.matches(INTERACTIVE)) continue;
       let skip = false;
-      for (let r = 0; r < rules.length; r++) {
-        if ((_d = (_c = rules[r]).skip) == null ? void 0 : _d.call(_c, el)) {
+      for (let c = 0; c < components2.length; c++) {
+        if ((_d = (_c = components2[c]).skip) == null ? void 0 : _d.call(_c, el)) {
           skip = true;
           break;
         }
@@ -347,15 +402,16 @@
   };
 
   // src/userscript/navigation/index.ts
-  var resolveScope = (el) => {
-    for (let i = 0; i < scopeRules.length; i++) {
-      const scope = scopeRules[i].scope(el);
+  var scopeFor = (el) => {
+    var _a, _b;
+    for (let i = 0; i < components.length; i++) {
+      const scope = (_b = (_a = components[i]).scope) == null ? void 0 : _b.call(_a, el);
       if (scope) return scope;
     }
     return null;
   };
   var moveFocus = (dir) => {
-    const els = focusables(focusRules);
+    const els = focusables(components);
     if (!els.length) return false;
     const active = document.activeElement;
     const current = active && active !== document.body && active !== document.documentElement ? active : null;
@@ -365,7 +421,7 @@
     }
     const pool = els.filter((el) => el !== current);
     if (dir === "up" || dir === "down") {
-      const scope = resolveScope(current);
+      const scope = scopeFor(current);
       if (scope) {
         const bestInScope = nearest(
           current.getBoundingClientRect(),
@@ -385,7 +441,7 @@
     return true;
   };
   var moveFocusOutside = (container, dir) => {
-    const els = focusables(focusRules).filter((el) => !container.contains(el));
+    const els = focusables(components).filter((el) => !container.contains(el));
     const best = nearest(container.getBoundingClientRect(), null, els, dir);
     if (!best) return false;
     best.focus();
@@ -408,10 +464,10 @@
   var installFullscreenExitFocus = () => {
     const onExit = () => {
       if (document.fullscreenElement) return;
-      const player2 = document.querySelector(".video-js");
+      const player3 = document.querySelector(".video-js");
       const active = document.activeElement;
-      if (player2 && active && player2.contains(active)) {
-        moveFocusOutside(player2, "down");
+      if (player3 && active && player3.contains(active)) {
+        moveFocusOutside(player3, "down");
       }
     };
     document.addEventListener("fullscreenchange", onExit, false);
@@ -425,18 +481,7 @@
     return tag === "a" || tag === "button" || tag === "input" || tag === "select" || tag === "textarea" || el.getAttribute("role") === "button";
   };
   var onEnter = () => {
-    const active = document.activeElement;
-    const author = commentAuthor(active);
-    if (author) {
-      author.click();
-      return true;
-    }
-    if (active && active.closest && active.closest(".vjs-big-play-button")) {
-      enterFullscreen();
-      play();
-      return true;
-    }
-    if (isActivatable(active)) return false;
+    if (isActivatable(document.activeElement)) return false;
     if (document.fullscreenElement || isFullscreen()) return togglePlay();
     if (!hasMedia()) return false;
     focusPlayer();
@@ -464,19 +509,20 @@
     const code = e.keyCode;
     const dir = ARROW[code];
     const active = document.activeElement;
-    if (isTextInput(active) && code !== KEYS.BACK && !inputArrowAllowed(active, dir)) {
-      return;
+    const ctx = { moveFocus, moveFocusOutside };
+    for (let i = 0; i < components.length; i++) {
+      const c = components[i];
+      const root = active && active.closest ? active.closest(c.selector) : null;
+      if (root && c.key && c.key(root, code, dir, ctx)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
     }
+    if (isTextInput(active) && code !== KEYS.BACK) return;
     let handled;
     if (dir) {
-      if (inPlayerContext()) {
-        const player2 = document.querySelector(".video-js");
-        const vertical = dir === "up" || dir === "down";
-        const leave = vertical && !document.fullscreenElement && player2 ? moveFocusOutside(player2, dir) : false;
-        handled = dir === "left" ? seekBy(-10) : dir === "right" ? seekBy(10) : leave || revealControls();
-      } else {
-        handled = moveFocus(dir);
-      }
+      handled = moveFocus(dir);
     } else {
       switch (code) {
         case KEYS.ESCAPE:
@@ -547,6 +593,81 @@
     else document.addEventListener("DOMContentLoaded", injectPreferencesSection, false);
   };
 
+  // src/userscript/registry.ts
+  var routeMatches = (route, pathname) => route instanceof RegExp ? route.test(pathname) : route(pathname);
+
+  // src/userscript/screens/firstResult.ts
+  var gridOf = (el) => {
+    let node = el.parentElement;
+    while (node && node !== document.body) {
+      if (node.querySelectorAll(".thumbnail a").length >= 2) return node;
+      node = node.parentElement;
+    }
+    return null;
+  };
+  var firstResult = () => {
+    const els = focusables(components);
+    let grid = null;
+    for (let i = 0; i < els.length; i++) {
+      if (els[i].matches(".thumbnail a")) {
+        grid = gridOf(els[i]);
+        break;
+      }
+    }
+    for (let i = 0; i < els.length; i++) {
+      if (grid ? grid.contains(els[i]) : els[i].matches(".thumbnail a")) return els[i];
+    }
+    return null;
+  };
+
+  // src/userscript/screens/channel.ts
+  var channelScreen = {
+    route: /^\/(channel|c|user)\//,
+    defaultFocus: firstResult
+  };
+
+  // src/userscript/screens/feed.ts
+  var feedScreen = {
+    route: (path) => path === "/" || path.startsWith("/feed/"),
+    defaultFocus: firstResult
+  };
+
+  // src/userscript/screens/search.ts
+  var searchScreen = {
+    route: /^\/search/,
+    defaultFocus: firstResult
+  };
+
+  // src/userscript/screens/watch.ts
+  var watchScreen = {
+    route: /^\/watch/,
+    defaultFocus: () => document.querySelector(".video-js")
+  };
+
+  // src/userscript/screens/index.ts
+  var screens = [watchScreen, searchScreen, channelScreen, feedScreen];
+  var resolveScreen = () => {
+    const path = location.pathname;
+    for (let i = 0; i < screens.length; i++) {
+      if (routeMatches(screens[i].route, path)) return screens[i];
+    }
+    return null;
+  };
+  var installScreenDefaultFocus = () => {
+    const focusDefault = () => {
+      if (window.__invidiousPicker) return;
+      const screen = resolveScreen();
+      const target = screen && screen.defaultFocus ? screen.defaultFocus() : null;
+      if (!target) return;
+      const active = document.activeElement;
+      if (active && active !== document.body && active !== document.documentElement) return;
+      target.focus();
+    };
+    if (document.readyState !== "loading") focusDefault();
+    else document.addEventListener("DOMContentLoaded", focusDefault, false);
+    window.addEventListener("load", focusDefault, false);
+  };
+
   // src/userscript/styles.ts
   var STYLES = [
     ":focus{outline:3px solid #fff !important;outline-offset:2px;}",
@@ -578,11 +699,13 @@
   var init = () => {
     if (document.getElementById("itv-style")) return;
     injectStyles();
+    prepareComponents();
     installKeyHandler();
     installFocusScrolling();
     installFullscreenExitFocus();
     ensurePlayerFocusable();
     document.addEventListener("DOMContentLoaded", ensurePlayerFocusable, false);
+    installScreenDefaultFocus();
     schedulePreferencesSection();
     log(`v${VERSION} active on ${location.pathname}`);
   };

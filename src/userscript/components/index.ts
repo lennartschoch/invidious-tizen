@@ -1,10 +1,16 @@
-import type { FocusRule, ScopeRule } from '../navigation/focus';
-import { commentRule } from './comment';
-import { playerRule } from './player';
-import { railScope } from './rail';
-import { tileRule } from './tile';
+import type { Component } from '../registry';
+import { comment } from './comment';
+import { input } from './input';
+import { player } from './player';
+import { rail } from './rail';
+import { tile } from './tile';
 
-/** The component rules active on every page. Components self-gate on their own
- *  markup, so a screen layer only needs to add exclusions or defaults. */
-export const focusRules: FocusRule[] = [playerRule, commentRule, tileRule];
-export const scopeRules: ScopeRule[] = [railScope];
+/** Every component, in key-dispatch order: the first selector that matches the
+ *  focused element and handles the key wins. Specific contexts (a text field, a
+ *  player) come before broad ones (tiles/rails, which handle no keys). */
+export const components: Component[] = [input, player, comment, tile, rail];
+
+/** Run each component's DOM prep once (idempotent). */
+export const prepareComponents = (): void => {
+  for (let i = 0; i < components.length; i++) components[i].prepare?.();
+};

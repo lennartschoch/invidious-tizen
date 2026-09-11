@@ -1,21 +1,20 @@
-import { commentAuthor } from './components/comment';
-import { inputArrowAllowed, isTextInput } from './components/input';
+import { components } from './components';
+import { isTextInput } from './components/input';
 import { ARROW, KEYS } from './constants';
 import {
   enterFullscreen,
   exitFullscreen,
   focusPlayer,
   hasMedia,
-  inPlayerContext,
   isFullscreen,
   pausePlayback,
   play,
-  revealControls,
   seekBy,
   seekPercent,
   togglePlay,
 } from './media';
 import { moveFocus, moveFocusOutside } from './navigation';
+import type { KeyContext } from './registry';
 
 const isActivatable = (el: Element | null): boolean => {
   if (!el) return false;
@@ -30,25 +29,10 @@ const isActivatable = (el: Element | null): boolean => {
   );
 };
 
-/** YouTube TV-style: OK selects a video, so on a watch page it focuses the
- *  player and enters fullscreen playback; in fullscreen it toggles play/pause.
- *  A real player control (big play button, control bar) is left to the browser,
- *  except the play overlay which also goes fullscreen. A focused comment opens
- *  its author. */
+/** Base OK when no component handles it: activate the focused element, or hand
+ *  a watch page to the player and start fullscreen playback. */
 const onEnter = (): boolean => {
-  const active = document.activeElement;
-  // A comment is a single focus stop: OK opens its author's channel.
-  const author = commentAuthor(active);
-  if (author) {
-    author.click();
-    return true;
-  }
-  if (active && active.closest && active.closest('.vjs-big-play-button')) {
-    enterFullscreen();
-    play();
-    return true;
-  }
-  if (isActivatable(active)) return false; // let the browser activate it
+  if (isActivatable(document.activeElement)) return false; // let the browser activate it
   if (document.fullscreenElement || isFullscreen()) return togglePlay();
   if (!hasMedia()) return false;
   focusPlayer();
@@ -82,25 +66,26 @@ const onKeyDown = (e: KeyboardEvent): void => {
 
   const code = e.keyCode;
   const dir = ARROW[code];
-  // While typing, leave the TV keyboard alone — except Back, and the arrows the
-  // input component lets through (Up/Down always, Left/Right at the caret edge).
   const active = document.activeElement;
-  if (isTextInput(active) && code !== KEYS.BACK && !inputArrowAllowed(active as Element, dir)) {
-    return;
+  const ctx: KeyContext = { moveFocus, moveFocusOutside };
+
+  // A component whose selector contains the focused element gets first refusal.
+  for (let i = 0; i < components.length; i++) {
+    const c = components[i];
+    const root = active && active.closest ? active.closest(c.selector) : null;
+    if (root && c.key && c.key(root, code, dir, ctx)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
   }
+
+  // Base. While typing, leave the TV keyboard alone — only Back gets through.
+  if (isTextInput(active) && code !== KEYS.BACK) return;
 
   let handled: boolean;
   if (dir) {
-    if (inPlayerContext()) {
-      const player = document.querySelector('.video-js');
-      const vertical = dir === 'up' || dir === 'down';
-      const leave =
-        vertical && !document.fullscreenElement && player ? moveFocusOutside(player, dir) : false;
-      handled =
-        dir === 'left' ? seekBy(-10) : dir === 'right' ? seekBy(10) : leave || revealControls();
-    } else {
-      handled = moveFocus(dir);
-    }
+    handled = moveFocus(dir);
   } else {
     switch (code) {
       case KEYS.ESCAPE:

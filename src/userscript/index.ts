@@ -9,22 +9,26 @@
  * Bundled to a single IIFE for TizenBrew (esbuild, target chrome69) so it runs
  * on Tizen 5.5 (2020 TVs).
  */
+import { prepareComponents } from './components';
 import { VERSION } from './constants';
 import { installKeyHandler } from './keys';
 import { log } from './log';
 import { ensurePlayerFocusable } from './media';
 import { installFocusScrolling, installFullscreenExitFocus } from './navigation';
 import { schedulePreferencesSection } from './preferences';
+import { installScreenDefaultFocus } from './screens';
 import { injectStyles } from './styles';
 
 const init = (): void => {
   if (document.getElementById('itv-style')) return;
   injectStyles();
+  prepareComponents();
   installKeyHandler();
   installFocusScrolling();
   installFullscreenExitFocus();
   ensurePlayerFocusable();
   document.addEventListener('DOMContentLoaded', ensurePlayerFocusable, false);
+  installScreenDefaultFocus();
   schedulePreferencesSection();
   log(`v${VERSION} active on ${location.pathname}`);
 };
