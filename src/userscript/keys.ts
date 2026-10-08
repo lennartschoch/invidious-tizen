@@ -1,6 +1,6 @@
 import { components } from './components';
 import { isTextInput } from './components/input';
-import { ARROW, KEYS } from './constants';
+import { ARROW, KEYS, PICKER_URL } from './constants';
 import {
   enterFullscreen,
   exitFullscreen,
@@ -41,14 +41,51 @@ const onEnter = (): boolean => {
   return true;
 };
 
-/** Back: leave fullscreen, else walk history back toward TizenBrew's module
- *  list, else exit the app once there is nowhere left to go. */
+/** Would popping one history entry stay on this instance?
+ *
+ *  The referrer says where this page was loaded from, and it survives a history
+ *  restore, so a page reached with Back still reports the picker or TizenBrew
+ *  when the instance was entered through it. That page is the instance's front
+ *  door, and popping history from there drifts off the instance — onto the
+ *  picker's loading state, which answers by bouncing forward again.
+ *  `history.length` cannot answer this: it counts the whole list, not the
+ *  current position within it.
+ */
+/* Invidious serves `referrer-policy: same-origin` or `strict-origin-when-cross-
+ * origin`; both keep the referrer for same-origin hops (as an origin, which is
+ * all this compares) and still report the picker on the hop in, so the check
+ * holds on a real instance. Should a webview strip it entirely, an empty referrer
+ * counts as the front door: Back then opens the chooser rather than drifting onto
+ * the loader — a blunt answer, but never a dead end.
+ */
+const atInstanceFrontDoor = (): boolean => {
+  try {
+    const ref = document.referrer;
+    return !ref || new URL(ref).origin !== window.location.origin;
+  } catch {
+    return true;
+  }
+};
+
+/** Hand the remote to the picker chooser. A forward navigation to `?pick=1`, so
+ *  it works whatever the history looks like and can never land on the loader.
+ *  Back from the chooser pops to this page again.
+ */
+const openPicker = (): boolean => {
+  window.location.href = `${PICKER_URL}?pick=1`;
+  return true;
+};
+
+/** Back: leave fullscreen; walk history while inside the instance; open the
+ *  picker chooser at its front door; exit the app only with nowhere left to go. */
 const handleBack = (): boolean => {
   if (exitFullscreen()) return true;
-  if (window.history && window.history.length > 1) {
+  const canPop = !!(window.history && window.history.length > 1);
+  if (canPop && !atInstanceFrontDoor()) {
     window.history.back();
     return true;
   }
+  if (canPop) return openPicker();
   try {
     if (typeof tizen !== 'undefined' && tizen && tizen.application) {
       tizen.application.getCurrentApplication().exit();

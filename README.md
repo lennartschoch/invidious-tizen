@@ -11,7 +11,7 @@ A [TizenBrew](https://github.com/reisxd/TizenBrew) module for **Tizen 5.5+** (20
 ![TizenBrew](https://img.shields.io/badge/TizenBrew-module-8A2BE2)
 ![Tizen](https://img.shields.io/badge/Tizen-5.5%2B-1428A0)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
-![tests](https://img.shields.io/badge/tests-58%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-69%20passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 <br>
@@ -32,13 +32,13 @@ Tizen's browser only hands a web page six keys — D-pad, Enter and Back. Media 
 - **▶️ YouTube-TV player controls** — play/pause, `±10s` seek, and `0–9` to jump to a percentage, exactly like the TV app.
 - **🎛 Media keys** — Play/Pause/Stop/Rewind/Fast-forward are registered via `tizen.tvinputdevice` and drive the video.js player.
 - **🔀 Instance picker** — first launch asks where to connect; later launches probe the instance and redirect as soon as it answers.
-- **🛟 Never stuck** — a dead instance leaves you on the picker instead of an error page, and Back steps back through history toward TizenBrew.
-- **↩️ Back done right** — leave fullscreen → step back toward TizenBrew's module list → exit only at the very start.
+- **🛟 Never stuck** — a dead instance leaves you on the picker instead of an error page, and Back always lands somewhere you can act on.
+- **↩️ Back done right** — leave fullscreen → step back through the instance → open the instance chooser at its front door → exit only with nothing left.
 
 ## 🚀 Install
 
 1. Install **TizenBrew** on the TV with the [TizenBrew Installer](https://github.com/reisxd/TizenBrewInstaller/releases) (enable Developer Mode, set the Host PC IP, reboot — see the [guide](https://github.com/reisxd/TizenBrew/blob/main/docs/README.md)).
-2. In TizenBrew → **Add module** → type **GitHub** → name `lennartschoch/invidious-tizen` (pin a version with `…@v0.2.2`).
+2. In TizenBrew → **Add module** → type **GitHub** → name `lennartschoch/invidious-tizen` (pin a version with `…@v0.2.3`).
 3. **Launch "Invidious TV"** and pick an instance.
 
 > The repo must be public: TizenBrew fetches the module and userscript from jsDelivr, and the picker from GitHub Pages — same layout as [TizenPortal](https://github.com/axelnanol/tizenportal) (`websiteURL` → `…/dist/index.html`).
@@ -51,7 +51,7 @@ Mirrors YouTube TV wherever the buttons exist there.
 |---|---|
 | **D-pad** | Move focus between links/buttons/inputs |
 | **OK** | Activate the focused item; in a text field, start typing (OK again submits the search); on a watch page, enter fullscreen and play; in fullscreen, play/pause |
-| **Back** | In the player: hide the bar, then exit fullscreen; otherwise step back toward TizenBrew → exit at the start |
+| **Back** | In the player: hide the bar, then exit fullscreen; inside the instance: step back; at its front door: open the instance chooser → exit at the very start |
 | **Play/Pause**, Play, Pause | Play or pause |
 | **Stop** | Pause |
 | **Rewind / Fast-forward** | Seek −10s / +10s |
@@ -87,10 +87,10 @@ off — it carries its own keys, focus and URL field.
 - **If it doesn't answer**, the picker stays put ("Couldn't reach …") — you're
   never dumped onto an error page.
 - **Change it any time** from Invidious → **Preferences → Invidious Tizen → Open instance picker**.
-- **Back never wastes a press on the loader.** An automatic connect uses
-  `location.replace`, so Back from the instance goes to TizenBrew. A mirror you
-  picked yourself keeps the picker in history (`location.href`), and Back lands
-  on the chooser — never on `Checking…` bouncing forward again.
+- **Back opens the chooser, never the loader.** Back at the front door of an
+  instance opens this page with `?pick=1`, so the chooser is what appears — the
+  `Checking…` state is skipped instead of sat in, and no history gymnastics are
+  needed to reach it.
 
 ## 🛠 How it works
 

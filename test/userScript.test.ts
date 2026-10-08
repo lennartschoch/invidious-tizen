@@ -4,13 +4,22 @@ import { readFileSync } from 'node:fs';
 
 const SRC = readFileSync(new URL('../dist/userScript.js', import.meta.url), 'utf8');
 
+/** The picker page (src/picker), where the userscript stays off and Back ends up. */
+const PICKER = 'https://lennartschoch.github.io/invidious-tizen/dist/index.html';
+
 type Win = any;
 
 // jsdom does not lay anything out, so the userscript's geometric navigation
 // needs rects fed in; each fixture element declares them with data-box="x,y,w,h".
-function setup(bodyHtml: string, url = 'https://invidious.test/', picker = false): Win {
+function setup(
+  bodyHtml: string,
+  url = 'https://invidious.test/',
+  picker = false,
+  referrer = '',
+): Win {
   const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
     url,
+    referrer: referrer || undefined, // jsdom rejects an empty referrer
     runScripts: 'outside-only',
     pretendToBeVisual: true,
   });
@@ -258,7 +267,7 @@ describe('injection', () => {
   });
 
   it('does not run on the instance picker (its own page)', () => {
-    const win = setup(NAV_HTML, 'https://lennartschoch.github.io/invidious-tizen/dist/index.html');
+    const win = setup(NAV_HTML, PICKER);
     expect(win.document.getElementById('itv-style')).toBeNull();
     expect(win.__invidiousTizen).toBeUndefined();
   });
@@ -266,10 +275,7 @@ describe('injection', () => {
   it('leaves the picker URL box editable by the picker itself', () => {
     // Our deferral waits for a key handler that ignores the picker, so applying
     // it here would leave the box read-only and the TV keyboard unreachable.
-    const win = setup(
-      '<input id="url" value="https://saved.example/">',
-      'https://lennartschoch.github.io/invidious-tizen/dist/index.html',
-    );
+    const win = setup('<input id="url" value="https://saved.example/">', PICKER);
     const input = win.document.getElementById('url') as HTMLInputElement;
     input.focus();
     expect(input.readOnly).toBe(false);
@@ -776,8 +782,13 @@ describe('Back precedence', () => {
     expect(exit).toHaveBeenCalledTimes(1);
   });
 
-  it('goes back through history toward TizenBrew', () => {
-    const win = setup(WATCH_HTML, 'https://invidious.test/watch?v=1');
+  it('walks history while the page came from the same instance', () => {
+    const win = setup(
+      WATCH_HTML,
+      'https://invidious.test/watch?v=1',
+      false,
+      'https://invidious.test/results?q=x',
+    );
     win.history.pushState({}, '', '/watch?v=2'); // history.length now > 1
     const back = vi.fn();
     win.history.back = back;
@@ -785,13 +796,28 @@ describe('Back precedence', () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 
-  it('goes back from the root too, instead of exiting the app', () => {
-    const win = setup(WATCH_HTML, 'https://invidious.test/');
+  it('hands Back to the picker chooser at the instance front door', () => {
+    // Reached from the picker, so popping history would land on the loader
+    // instead of a page the user can act on: neither history.back() nor the Tizen
+    // exit may fire — the hand-off to the chooser does.
+    const win = setup(WATCH_HTML, 'https://invidious.test/', false, PICKER + '?pick=1');
     win.history.pushState({}, '', '/'); // history.length now > 1
     const back = vi.fn();
     win.history.back = back;
+    const exit = vi.fn();
+    win.tizen = { application: { getCurrentApplication: () => ({ exit }) } };
     press(win, 10009);
-    expect(back).toHaveBeenCalledTimes(1);
+    expect(back).not.toHaveBeenCalled();
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it('treats a stripped referrer as the front door too', () => {
+    const win = setup(WATCH_HTML, 'https://invidious.test/'); // no referrer
+    win.history.pushState({}, '', '/');
+    const back = vi.fn();
+    win.history.back = back;
+    press(win, 10009);
+    expect(back).not.toHaveBeenCalled();
   });
 
   it('exits the Tizen app only when there is no history', () => {

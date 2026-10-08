@@ -21,7 +21,7 @@
     39: "right",
     40: "down"
   };
-  var VERSION = "0.2.2";
+  var VERSION = "0.2.3";
   var PICKER_URL = "https://lennartschoch.github.io/invidious-tizen/dist/index.html";
 
   // src/userscript/components/comment.ts
@@ -783,12 +783,26 @@
     play();
     return true;
   };
+  var atInstanceFrontDoor = () => {
+    try {
+      const ref = document.referrer;
+      return !ref || new URL(ref).origin !== window.location.origin;
+    } catch {
+      return true;
+    }
+  };
+  var openPicker = () => {
+    window.location.href = `${PICKER_URL}?pick=1`;
+    return true;
+  };
   var handleBack = () => {
     if (exitFullscreen()) return true;
-    if (window.history && window.history.length > 1) {
+    const canPop = !!(window.history && window.history.length > 1);
+    if (canPop && !atInstanceFrontDoor()) {
       window.history.back();
       return true;
     }
+    if (canPop) return openPicker();
     try {
       if (typeof tizen !== "undefined" && tizen && tizen.application) {
         tizen.application.getCurrentApplication().exit();
