@@ -71,6 +71,19 @@ const submit = (el: Element): boolean => {
   return true;
 };
 
+/** Place the caret at the end of an existing value. Tizen raises the keyboard
+ *  for a field that becomes editable as it takes focus, but with a value already
+ *  in it the caret is left undefined and the keyboard stays shut. */
+const placeCaretAtEnd = (el: Element): void => {
+  try {
+    const input = el as HTMLInputElement;
+    const end = (input.value || '').length;
+    input.setSelectionRange(end, end);
+  } catch {
+    /* no selection API for this input type */
+  }
+};
+
 /** True when the caret is at `dir`'s edge, so Left/Right may leave the field. */
 const caretAtEdge = (input: HTMLInputElement, dir: 'left' | 'right'): boolean => {
   try {
@@ -99,6 +112,7 @@ export const input: Component = {
         justActivated = root;
         (root as HTMLElement).blur();
         (root as HTMLElement).focus();
+        placeCaretAtEnd(root);
         return true;
       }
       return singleLine && submit(root);

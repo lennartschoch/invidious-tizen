@@ -78,7 +78,21 @@
   var pickerEl = document.getElementById('picker');
   var loadingEl = document.getElementById('loading');
   var loadingText = document.getElementById('loading-text');
+  var urlInput = document.getElementById('url');
   var pending = false;
+
+  // True when this document was restored by the remote's Back key (an instance
+  // stepped back onto the picker). Then the chooser is what the user wants, not
+  // the loading state that would bounce them forward again.
+  var resumed = false;
+  try {
+    var nav = window.performance && window.performance.navigation;
+    resumed = !!(nav && nav.type === 2); // PerformanceNavigation.TYPE_BACK_FORWARD
+    if (!resumed && window.performance && window.performance.getEntriesByType) {
+      var navEntry = window.performance.getEntriesByType('navigation')[0];
+      resumed = !!(navEntry && navEntry.type === 'back_forward');
+    }
+  } catch (e) { /* ignore */ }
 
   function normalize(value) {
     var u = (value || '').trim();
@@ -89,16 +103,21 @@
   function saved() { try { return localStorage.getItem(STORE_KEY) || ''; } catch (e) { return ''; } }
   function save(u) { try { localStorage.setItem(STORE_KEY, u); } catch (e) { /* private mode */ } }
   function host(u) { return u.replace(/^https?:\/\//i, '').replace(/\/$/, ''); }
-  // assign (not replace) so the picker stays in history and Back returns here.
-  function go(u) { window.location.href = u; }
+  // A deliberate choice uses assign, so the picker stays in history and Back
+  // returns to the chooser. The automatic connect uses replace: nothing before
+  // an instance is worth going back to, and Back must not stop on a loader that
+  // immediately forwards to the same page.
+  function go(u, replace) {
+    if (replace) window.location.replace(u);
+    else window.location.href = u;
+  }
 
   function showPicker(message) {
     pending = false;
     loadingEl.hidden = true;
     pickerEl.hidden = false;
     statusEl.textContent = message || 'Choose an instance';
-    var input = document.getElementById('url');
-    if (input && !input.value) input.value = saved();
+    if (urlInput && !urlInput.value) urlInput.value = saved();
     var first = document.querySelector('#presets button');
     if (first) { try { first.focus(); } catch (e) { /* ignore */ } }
   }
@@ -124,19 +143,29 @@
   }
 
   // Confirm the instance is alive, then redirect as soon as it answers.
-  function connect(u) {
+  // `automatic` connects (nothing was chosen here) replace the picker in history.
+  function connect(u, automatic) {
     showLoading('Checking ' + host(u) + '\u2026');
     probe(u).then(function (alive) {
       if (!pending) return; // cancelled
-      if (alive) go(u);
+      if (alive) go(u, !!automatic);
       else showPicker("Couldn't reach " + host(u) + ". Choose an instance.");
     });
   }
 
+  // The custom form: normalize, remember, connect. Returns false for an empty box.
+  function submitCustom() {
+    var u = normalize(urlInput.value);
+    if (!u) return false;
+    save(u);
+    connect(u, false);
+    return true;
+  }
+
   // Geometric D-pad navigation. Tizen's webview does not move focus between
   // controls on its own, so the picker walks the layout itself. This mirrors
-  // src/userscript/navigation.ts; the injected userscript leaves the picker's
-  // keys to us (window.__invidiousPicker), so the picker must stay standalone.
+  // src/userscript/navigation.ts. The userscript skips this page entirely (see
+  // isPickerPage), so everything the TV needs has to live here.
   var FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex],[role="button"]';
   var INTERACTIVE = 'a[href],button,input,select,textarea,[role="button"]';
   var ARROWS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
@@ -194,8 +223,54 @@
     return true;
   }
 
-  // Back leaves for the TizenBrew module list, D-pad moves focus. Arrows stay
-  // with the URL input so the TV keyboard and caret work.
+  // The URL field is highlighted read-only and opens the TV keyboard on OK, the
+  // same deferral the userscript uses on an instance (which never runs here).
+  // Focusing an editable field on a TV either raises the keyboard at once or,
+  // with a value already in it, leaves it unreachable: neither is what stepping
+  // past the box with the D-pad should do.
+  var PENDING = 'data-itv-edit-pending';
+  var justActivated = null;
+
+  document.addEventListener(
+    'focusin',
+    function (e) {
+      var el = e.target;
+      if (!el || el.tagName !== 'INPUT') return;
+      if (justActivated === el) { justActivated = null; return; }
+      if (!el.hasAttribute(PENDING)) {
+        el.readOnly = true;
+        el.setAttribute(PENDING, '1');
+      }
+    },
+    true,
+  );
+
+  document.addEventListener(
+    'focusout',
+    function (e) {
+      var el = e.target;
+      if (!el || !el.hasAttribute || !el.hasAttribute(PENDING)) return;
+      el.removeAttribute(PENDING);
+      el.readOnly = false;
+    },
+    true,
+  );
+
+  // OK raises the keyboard: the field has to become editable while it takes
+  // focus, and the caret has to be placed explicitly or a pre-filled value
+  // leaves Tizen with nothing to show the keyboard around.
+  function startEditing(el) {
+    el.removeAttribute(PENDING);
+    el.readOnly = false;
+    justActivated = el;
+    el.blur();
+    el.focus();
+    try {
+      var end = (el.value || '').length;
+      el.setSelectionRange(end, end);
+    } catch (e) { /* not a text field */ }
+  }
+
   function exitToTizenBrew() {
     try {
       if (typeof tizen !== 'undefined' && tizen && tizen.application) {
@@ -207,16 +282,38 @@
   }
 
   window.addEventListener('keydown', function (e) {
+    var active = document.activeElement;
+    var inUrl = active && active.tagName === 'INPUT' && active.id === 'url';
+    var editing = inUrl && !active.hasAttribute(PENDING);
+
     if (e.keyCode === 10009 || e.keyCode === 27) {
-      if (window.history && window.history.length > 1) window.history.back();
+      // Back while the keyboard is up closes the keyboard; otherwise step back
+      // toward TizenBrew. Already stepped back onto the chooser means there is
+      // nothing left between here and TizenBrew, so exit instead of pushing
+      // against the start of the history.
+      if (editing) { active.blur(); }
+      else if (resumed) exitToTizenBrew();
+      else if (window.history && window.history.length > 1) window.history.back();
       else exitToTizenBrew();
       e.preventDefault();
       e.stopPropagation();
       return;
     }
     if (pending) { showPicker(); return; }
-    var tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
-    if (tag === 'input' || tag === 'textarea') return;
+
+    // Editing: the D-pad and OK belong to the TV keyboard and the caret.
+    if (editing) {
+      if (e.keyCode === 13 && submitCustom()) { e.preventDefault(); e.stopPropagation(); }
+      return;
+    }
+    // A highlighted-but-shut URL field is left with the D-pad, so stepping
+    // past it works and OK can open the keyboard.
+    if (inUrl && e.keyCode === 13) {
+      startEditing(active);
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     var dir = ARROWS[e.keyCode];
     if (dir && moveFocus(dir)) { e.preventDefault(); e.stopPropagation(); }
   }, true);
@@ -226,14 +323,19 @@
     var b = document.createElement('button');
     b.type = 'button';
     b.textContent = preset.flag + '  ' + host(preset.url);
-    b.addEventListener('click', function () { save(preset.url); connect(preset.url); });
+    b.addEventListener('click', function () { save(preset.url); connect(preset.url, false); });
     wrap.appendChild(b);
   });
 
   document.getElementById('custom').addEventListener('submit', function (e) {
     e.preventDefault();
-    var u = normalize(document.getElementById('url').value);
-    if (u) { save(u); connect(u); }
+    submitCustom();
+  });
+
+  // A restore from the back/forward cache hands the page back exactly as it was,
+  // spinner included, and skips the checks above. Cancel that loader too.
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) showPicker();
   });
 
   // `?instance=` is accepted for programmatic use.
@@ -244,10 +346,12 @@
 
   if (requested) {
     var chosen = normalize(requested);
-    if (chosen) { save(chosen); connect(chosen); return; }
+    if (chosen) { save(chosen); connect(chosen, true); return; }
   }
-  // First launch: wait for a choice. Later launches: verify, then connect.
-  if (current && !forcePick) connect(current);
+  // First launch: wait for a choice. Later launches: verify, then connect, and
+  // replace this page on the way so Back steps past the loader. Arriving back
+  // from an instance always shows the chooser, whatever is saved.
+  if (current && !forcePick && !resumed) connect(current, true);
   else showPicker();
 })();
 </script>

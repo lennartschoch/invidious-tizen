@@ -21,7 +21,7 @@
     39: "right",
     40: "down"
   };
-  var VERSION = "0.2.1";
+  var VERSION = "0.2.2";
   var PICKER_URL = "https://lennartschoch.github.io/invidious-tizen/dist/index.html";
 
   // src/userscript/components/comment.ts
@@ -116,6 +116,14 @@
     form.submit();
     return true;
   };
+  var placeCaretAtEnd = (el) => {
+    try {
+      const input2 = el;
+      const end = (input2.value || "").length;
+      input2.setSelectionRange(end, end);
+    } catch {
+    }
+  };
   var caretAtEdge = (input2, dir) => {
     try {
       const start = input2.selectionStart;
@@ -137,6 +145,7 @@
           justActivated = root;
           root.blur();
           root.focus();
+          placeCaretAtEnd(root);
           return true;
         }
         return singleLine && submit(root);
@@ -988,6 +997,16 @@
   };
 
   // src/userscript/index.ts
+  var PICKER_PATH = PICKER_URL.replace(/^https?:\/\/[^/]+/, "").replace(/index\.html$/, "");
+  var isPickerPage = () => {
+    if (window.__invidiousPicker) return true;
+    try {
+      const path = location.pathname;
+      return path === PICKER_PATH || path === `${PICKER_PATH}index.html`;
+    } catch {
+      return false;
+    }
+  };
   var init = () => {
     if (document.getElementById("itv-style")) return;
     injectStyles();
@@ -1004,7 +1023,7 @@
     schedulePreferencesSection();
     log(`v${VERSION} active on ${location.pathname}`);
   };
-  if (!window.__invidiousTizen && !location.pathname.startsWith("/tizenbrew-ui/")) {
+  if (!window.__invidiousTizen && !isPickerPage() && !location.pathname.startsWith("/tizenbrew-ui/")) {
     window.__invidiousTizen = true;
     if (document.documentElement) init();
     else document.addEventListener("DOMContentLoaded", init, false);

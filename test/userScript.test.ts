@@ -257,6 +257,30 @@ describe('injection', () => {
     expect(win.__invidiousTizen).toBeUndefined();
   });
 
+  it('does not run on the instance picker (its own page)', () => {
+    const win = setup(NAV_HTML, 'https://lennartschoch.github.io/invidious-tizen/dist/index.html');
+    expect(win.document.getElementById('itv-style')).toBeNull();
+    expect(win.__invidiousTizen).toBeUndefined();
+  });
+
+  it('leaves the picker URL box editable by the picker itself', () => {
+    // Our deferral waits for a key handler that ignores the picker, so applying
+    // it here would leave the box read-only and the TV keyboard unreachable.
+    const win = setup(
+      '<input id="url" value="https://saved.example/">',
+      'https://lennartschoch.github.io/invidious-tizen/dist/index.html',
+    );
+    const input = win.document.getElementById('url') as HTMLInputElement;
+    input.focus();
+    expect(input.readOnly).toBe(false);
+  });
+
+  it('does not run when the picker marks the page without a known path', () => {
+    const win = setup(NAV_HTML, 'https://fork.example/', true);
+    expect(win.document.getElementById('itv-style')).toBeNull();
+    expect(win.__invidiousTizen).toBeUndefined();
+  });
+
   it('forces the light theme on load', () => {
     const win = setup('<div></div>');
     win.document.body.classList.add('dark-theme');
@@ -355,6 +379,17 @@ describe('D-pad navigation', () => {
     expect(input.readOnly).toBe(false);
     press(win, 13); // OK -> submit
     expect(submitted).toBe(true);
+  });
+
+  it('places the caret at the end of a prefilled value when editing starts', () => {
+    const win = setup(SEARCH_HTML);
+    const input = win.document.getElementById('q') as HTMLInputElement;
+    input.value = 'invidious';
+    input.focus();
+    press(win, 13); // OK -> editing
+    expect(input.readOnly).toBe(false);
+    expect(input.selectionStart).toBe('invidious'.length);
+    expect(input.selectionEnd).toBe('invidious'.length);
   });
 
   it('collapses a comment to one stop and opens its author on OK', () => {

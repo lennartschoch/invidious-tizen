@@ -7,11 +7,33 @@ const STORE_KEY = 'invidious-tizen.instance';
 
 function load(): any {
   // jsdom can't navigate; location.replace is a no-op we don't need.
+  return loadAt('https://picker.test/');
+}
+
+function loadAt(url: string, beforeParse?: (w: any) => void): any {
   return new JSDOM(HTML, {
-    url: 'https://picker.test/',
+    url,
     runScripts: 'dangerously',
     pretendToBeVisual: true,
+    beforeParse,
   }).window;
+}
+
+/** Saved instance + a back/forward navigation type, i.e. Back pressed on an
+ *  instance stepping onto the picker. */
+function loadResumed(before: (w: any) => void = () => {}): any {
+  return loadAt('https://picker.test/', (w: any) => {
+    w.localStorage.setItem(STORE_KEY, 'https://saved.example/');
+    w.performance.navigation = { type: 2 };
+    before(w);
+  });
+}
+
+function press(win: any, code: number): boolean {
+  const e = new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
+  Object.defineProperty(e, 'keyCode', { get: () => code });
+  win.document.dispatchEvent(e);
+  return e.defaultPrevented;
 }
 
 describe('instance picker', () => {
@@ -37,27 +59,84 @@ describe('instance picker', () => {
       const y = i * 60;
       return { x: 0, y, left: 0, top: y, width: 400, height: 40, right: 400, bottom: y + 40 };
     };
-    const press = (code: number): boolean => {
-      const e = new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
-      Object.defineProperty(e, 'keyCode', { get: () => code });
-      win.document.dispatchEvent(e);
-      return e.defaultPrevented;
-    };
-
     expect(win.document.activeElement).toBe(buttons[0]);
-    expect(press(40)).toBe(true); // ArrowDown
+    expect(press(win, 40)).toBe(true); // ArrowDown
     expect(win.document.activeElement).toBe(buttons[1]);
   });
 
-  it('does not hijack arrows while typing in the URL box', () => {
+  it('keeps the URL box read-only until OK opens the keyboard', () => {
+    const win = load();
+    const input = win.document.getElementById('url');
+    input.value = 'https://saved.example/';
+    input.focus();
+    expect(input.readOnly).toBe(true); // no keyboard from stepping onto the box
+    expect(press(win, 13)).toBe(true); // OK
+    expect(input.readOnly).toBe(false);
+    expect(win.document.activeElement).toBe(input);
+  });
+
+  it('leaves arrows and typing to the keyboard once editing', () => {
+    const win = load();
+    const input = win.document.getElementById('url');
+    input.value = 'https://saved.example/';
+    input.focus();
+    press(win, 13);
+    expect(press(win, 40)).toBe(false); // ArrowDown reaches the field, not the D-pad
+    expect(press(win, 39)).toBe(false); // ArrowRight moves the caret
+    expect(win.document.activeElement).toBe(input);
+    expect(input.readOnly).toBe(false);
+  });
+
+  it('steps out of the shut URL box with the D-pad', () => {
+    const win = load();
+    const input = win.document.getElementById('url');
+    const buttons = Array.from(win.document.querySelectorAll('#presets button')) as any[];
+    win.Element.prototype.getBoundingClientRect = function (this: any) {
+      const y = this === input ? 0 : 200 + buttons.indexOf(this) * 60;
+      return { x: 0, y, left: 0, top: y, width: 400, height: 40, right: 400, bottom: y + 40 };
+    };
+    input.focus();
+    expect(press(win, 40)).toBe(true); // ArrowDown leaves the field instead of hunting for a caret
+    expect(win.document.activeElement).not.toBe(input);
+  });
+
+  it('connects automatically to a saved instance', () => {
+    const win = loadAt('https://picker.test/', (w: any) => {
+      w.localStorage.setItem(STORE_KEY, 'https://saved.example/');
+    });
+    expect(win.document.getElementById('loading').hidden).toBe(false);
+    expect(win.document.getElementById('picker').hidden).toBe(true);
+  });
+
+  it('shows the chooser, not the loader, when Back returns from an instance', () => {
+    const win = loadResumed();
+    expect(win.document.getElementById('loading').hidden).toBe(true);
+    expect(win.document.getElementById('picker').hidden).toBe(false);
+    expect(win.document.getElementById('status').textContent).toBe('Choose an instance');
+    expect(win.document.getElementById('url').value).toBe('https://saved.example/');
+  });
+
+  it('exits on Back from the chooser after resuming (no history left behind it)', () => {
+    const win = loadResumed();
+    const back = vi.fn();
+    win.history.back = back;
+    const exit = vi.fn();
+    win.tizen = { application: { getCurrentApplication: () => ({ exit }) } };
+    expect(press(win, 10009)).toBe(true);
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(back).not.toHaveBeenCalled();
+  });
+
+  it('closes the keyboard with Back before leaving the page', () => {
     const win = load();
     const input = win.document.getElementById('url');
     input.focus();
-    const e = new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
-    Object.defineProperty(e, 'keyCode', { get: () => 40 });
-    win.document.dispatchEvent(e);
-    expect(e.defaultPrevented).toBe(false);
-    expect(win.document.activeElement).toBe(input);
+    press(win, 13); // start editing
+    const exit = vi.fn();
+    win.tizen = { application: { getCurrentApplication: () => ({ exit }) } };
+    expect(press(win, 10009)).toBe(true);
+    expect(win.document.activeElement).not.toBe(input);
+    expect(exit).not.toHaveBeenCalled();
   });
 
   it('goes back toward TizenBrew when there is history', () => {

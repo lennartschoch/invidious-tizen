@@ -38,7 +38,7 @@ Tizen's browser only hands a web page six keys — D-pad, Enter and Back. Media 
 ## 🚀 Install
 
 1. Install **TizenBrew** on the TV with the [TizenBrew Installer](https://github.com/reisxd/TizenBrewInstaller/releases) (enable Developer Mode, set the Host PC IP, reboot — see the [guide](https://github.com/reisxd/TizenBrew/blob/main/docs/README.md)).
-2. In TizenBrew → **Add module** → type **GitHub** → name `lennartschoch/invidious-tizen` (pin a version with `…@v0.2.1`).
+2. In TizenBrew → **Add module** → type **GitHub** → name `lennartschoch/invidious-tizen` (pin a version with `…@v0.2.2`).
 3. **Launch "Invidious TV"** and pick an instance.
 
 > The repo must be public: TizenBrew fetches the module and userscript from jsDelivr, and the picker from GitHub Pages — same layout as [TizenPortal](https://github.com/axelnanol/tizenportal) (`websiteURL` → `…/dist/index.html`).
@@ -74,17 +74,23 @@ content. The player is focused automatically on load.
 
 TizenBrew loads a module's `websiteURL` and keeps injecting the userscript into
 every page the webview visits, so `websiteURL` points at a small picker rather
-than at one hardcoded instance.
+than at one hardcoded instance. The picker is the one page the userscript stays
+off — it carries its own keys, focus and URL field.
 
 - **First launch** waits for you to choose — a preset from the
   [Invidious docs](https://docs.invidious.io/instances/) or your own URL. The
   choice is saved on the TV.
 - **Later launches** show a `Checking <host>…` state, probe the instance, and
   redirect **as soon as it answers**.
+- **Typing a URL** needs one `OK` on the URL box to raise the TV keyboard; `OK`
+  with the keyboard up connects.
 - **If it doesn't answer**, the picker stays put ("Couldn't reach …") — you're
   never dumped onto an error page.
 - **Change it any time** from Invidious → **Preferences → Invidious Tizen → Open instance picker**.
-- It uses `location.href` (assign), so it stays in history and **Back** steps through the picker on the way to TizenBrew.
+- **Back never wastes a press on the loader.** An automatic connect uses
+  `location.replace`, so Back from the instance goes to TizenBrew. A mirror you
+  picked yourself keeps the picker in history (`location.href`), and Back lands
+  on the chooser — never on `Checking…` bouncing forward again.
 
 ## 🛠 How it works
 
